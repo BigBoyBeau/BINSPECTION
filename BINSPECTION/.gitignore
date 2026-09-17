@@ -1,0 +1,45 @@
+# Visual Studio temporary files, build results, and
+# user-specific files
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.cache
+*.pdb
+*.dll
+*.tlb
+*.log
+*.vspscc
+*.vssscc
+_ReSharper*/
+*.DotSettings.user
+
+# NuGet packages
+*.nupkg
+packages/
+
+# Build results
+*.exe
+*.app
+*.ilk
+*.meta
+*.obj
+*.tmp
+*.iobj
+*.pch
+*.ipdb
+*.pgc
+*.pgd
+
+# Other generated files
+*.csproj.user
+*.suo
+*.userprefs
+*.resharper
+*.DS_Store
+
+# Logs
+logs/

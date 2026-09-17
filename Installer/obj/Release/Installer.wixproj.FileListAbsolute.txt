@@ -1,0 +1,4 @@
+D:\Binspection\Installer\obj\Release\Installer.wixproj.CoreCompileInputs.cache
+D:\Binspection\Installer\obj\Release\BINSPECTION.msi
+D:\Binspection\Installer\obj\Release\BINSPECTION.wixpdb
+D:\Binspection\Installer\obj\Release\Installer.wixproj.BindTracking-neutral.txt

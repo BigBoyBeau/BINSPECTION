@@ -1,0 +1,57 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\Binspection\\Installer\\Installer.wixproj": {}
+  },
+  "projects": {
+    "D:\\Binspection\\Installer\\Installer.wixproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\Binspection\\Installer\\Installer.wixproj",
+        "projectName": "BINSPECTION",
+        "projectPath": "D:\\Binspection\\Installer\\Installer.wixproj",
+        "packagesPath": "C:\\Users\\bfairbrother.PRECISION-MFG\\.nuget\\packages\\",
+        "outputPath": "D:\\Binspection\\Installer\\obj\\",
+        "projectStyle": "PackageReference",
+        "UsingMicrosoftNETSdk": false,
+        "configFilePaths": [
+          "C:\\Users\\bfairbrother.PRECISION-MFG\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "native"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "native": {
+            "framework": "native",
+            "targetAlias": "native",
+            "projectReferences": {}
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "native": {
+          "framework": "native",
+          "targetAlias": "native",
+          "dependencies": {
+            "WixToolset.UI.wixext": {
+              "target": "Package",
+              "version": "[5.0.2, )"
+            },
+            "WixToolset.Util.wixext": {
+              "target": "Package",
+              "version": "[5.0.2, )"
+            }
+          }
+        }
+      }
+    }
+  }
+}

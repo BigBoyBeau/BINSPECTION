@@ -1,0 +1,81 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+    xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="BINSPECTION"
+           Manufacturer="HP Inc."
+           Version="0.0.6.0"
+           UpgradeCode="F95C951D-BE68-40AB-AB4A-CE7CA7EE8D08"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BINSPECTION is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- .NET Framework 4.8 = registry Release value 528040 or higher.
+         https://learn.microsoft.com/dotnet/framework/migration-guide/how-to-determine-which-versions-are-installed -->
+    <Property Id="DOTNET48RELEASE" Secure="yes">
+      <RegistrySearch Id="DotNet48Release"
+                       Root="HKLM"
+                       Key="SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"
+                       Name="Release"
+                       Type="raw" />
+    </Property>
+    <!--
+      RegistrySearch's only Result type for a value is "raw", which returns
+      integers with a literal leading "#" (e.g. "#533509") - comparing that
+      against a bare integer literal does a STRING comparison and silently
+      gives the wrong answer (found the hard way: a machine with 4.8.09221
+      installed, Release=533509, still failed this check). The officially
+      documented fix is to compare against a matching "#"-prefixed string
+      literal instead, which MSI's condition evaluator recognizes and
+      compares numerically.
+    -->
+    <Launch Condition="Installed OR DOTNET48RELEASE &gt;= &quot;#528040&quot;"
+            Message="BINSPECTION requires .NET Framework 4.8 or later. Install it from https://dotnet.microsoft.com/download/dotnet-framework/net48 and run this setup again." />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="BINSPECTION" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="BINSPECTION" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Files Include="$(var.ReleaseDir)\*.dll" />
+      <Files Include="$(var.ReleaseDir)\*.dll.config" />
+      <Files Include="$(var.ReleaseDir)\BINSPECTION.pdb" />
+    </ComponentGroup>
+
+    <!--
+      Registers the installed DLL for COM interop by running regasm.exe
+      against it, exactly like the dev-build post-build target
+      (BINSPECTION.csproj's RegisterBinspectionComServer) does - this
+      reuses BInspectionAddin.RegisterFunction/UnregisterFunction
+      (AddIn/BInspectionAddIn.cs), which write the SolidWorks-specific
+      AddIns/AddInsStartup registry keys, rather than re-encoding that
+      logic as WiX registry entries that could drift out of sync.
+    -->
+    <CustomAction Id="RegisterComServer"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[WindowsFolder]Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe&quot; &quot;[INSTALLFOLDER]BINSPECTION.dll&quot; /codebase"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <CustomAction Id="UnregisterComServer"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[WindowsFolder]Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe&quot; &quot;[INSTALLFOLDER]BINSPECTION.dll&quot; /unregister"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterComServer" After="InstallFiles" Condition="NOT Installed" />
+      <Custom Action="UnregisterComServer" Before="RemoveFiles" Condition="Installed AND (REMOVE=&quot;ALL&quot;) AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+
+  </Package>
+</Wix>

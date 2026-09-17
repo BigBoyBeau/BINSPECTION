@@ -1,0 +1,218 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{0A07681C-5469-4146-99E5-65CDB9583625}</ProjectGuid>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <OutputType>Library</OutputType>
+    <RootNamespace>BINSPECTION</RootNamespace>
+    <AssemblyName>BINSPECTION</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <RegisterForComInterop Condition="'$(MSBuildRuntimeType)' == 'Core'">false</RegisterForComInterop>
+    <RegisterForComInterop Condition="'$(MSBuildRuntimeType)' != 'Core'">true</RegisterForComInterop>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="EPPlus, Version=8.6.3.0, Culture=neutral, PublicKeyToken=ea159fdaa78159a1, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.8.6.3\lib\net462\EPPlus.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus.Interfaces, Version=8.6.2.0, Culture=neutral, PublicKeyToken=a694d7f3b0907a61, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.Interfaces.8.6.2\lib\net462\EPPlus.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.IO.RecyclableMemoryStream, Version=3.0.1.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.IO.RecyclableMemoryStream.3.0.1\lib\netstandard2.0\Microsoft.IO.RecyclableMemoryStream.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swpublished">
+      <HintPath>C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swpublished.dll</HintPath>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.Annotations, Version=4.2.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.ComponentModel.Annotations.5.0.0\lib\net461\System.ComponentModel.Annotations.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.configuration" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=4.0.4.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Security" />
+    <Reference Include="System.Security.Cryptography.Xml, Version=8.0.0.4, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.Cryptography.Xml.8.0.4\lib\net462\System.Security.Cryptography.Xml.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AddIn\BInspectionAddIn.cs" />
+    <Compile Include="CommandManager\CommandManagerHandler.cs" />
+    <Compile Include="Core\AnnotationScanner.cs" />
+    <Compile Include="Core\AttributeManager.cs" />
+    <Compile Include="Core\CharacteristicManager.cs" />
+    <Compile Include="Core\BalloonManager.cs" />
+    <Compile Include="Core\BalloonPlacementService.cs" />
+    <Compile Include="Core\AnnotationTextMetrics.cs" />
+    <Compile Include="Core\PersistenceManager.cs" />
+    <Compile Include="Core\PersistentReferenceHelper.cs" />
+    <Compile Include="Core\ReconciliationPrompt.cs" />
+    <Compile Include="Core\ReconciliationService.cs" />
+    <Compile Include="Core\ReportGenerator.cs" />
+    <Compile Include="Core\SeverityClassifier.cs" />
+    <Compile Include="Core\GtolTextFormatter.cs" />
+    <Compile Include="Core\GdtSymbolFontTranslator.cs" />
+    <Compile Include="Core\HoleCalloutExtractor.cs" />
+    <Compile Include="Core\ChamferDiagnostics.cs" />
+    <Compile Include="Core\ReferenceDimensionDiagnostics.cs" />
+    <Compile Include="Core\ChamferValueReader.cs" />
+    <Compile Include="Core\InspectionDataManager.cs" />
+    <Compile Include="Core\CommandIconGenerator.cs" />
+    <Compile Include="Core\DimensionScanner.cs" />
+    <Compile Include="Core\DrawingSheetHelper.cs" />
+    <Compile Include="Core\BalloonGridService.cs" />
+    <Compile Include="Core\DimensionBoxSketchService.cs" />
+    <Compile Include="Core\ExcelLicense.cs" />
+    <Compile Include="Core\LegacyNumberImporter.cs" />
+    <Compile Include="Core\LegacyNumberMatcher.cs" />
+    <Compile Include="Core\LegacyRenumberService.cs" />
+    <Compile Include="Models\Characteristics.cs" />
+    <Compile Include="Models\ProjectData.cs" />
+    <Compile Include="Models\BalloonNumberRange.cs" />
+    <Compile Include="Models\SheetToleranceSet.cs" />
+    <Compile Include="Models\ReconciliationResult.cs" />
+    <Compile Include="Models\LegacyMatchResult.cs" />
+    <Compile Include="Models\ReportHeaderSettings.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Settings\Classes.cs" />
+    <Compile Include="Settings\Methods.cs" />
+    <Compile Include="UI\InspectionPMP.cs" />
+    <Compile Include="UI\WindowSizing.cs" />
+    <Compile Include="UI\SheetToleranceSelectionWindow.xaml.cs">
+      <DependentUpon>SheetToleranceSelectionWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\BalloonManagerWindow.xaml.cs">
+      <DependentUpon>BalloonManagerWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\LegacyConversionWindow.xaml.cs">
+      <DependentUpon>LegacyConversionWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\CreateBalloonsSheetSelectionWindow.xaml.cs">
+      <DependentUpon>CreateBalloonsSheetSelectionWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\RefreshBalloonsSheetSelectionWindow.xaml.cs">
+      <DependentUpon>RefreshBalloonsSheetSelectionWindow.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="UI\SheetToleranceSelectionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\BalloonManagerWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\LegacyConversionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\CreateBalloonsSheetSelectionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\RefreshBalloonsSheetSelectionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\**\*.png" />
+  </ItemGroup>
+  <PropertyGroup>
+    <RegAsmExe Condition="Exists('$(SystemRoot)\Microsoft.NET\Framework64\v4.0.30319\regasm.exe')">$(SystemRoot)\Microsoft.NET\Framework64\v4.0.30319\regasm.exe</RegAsmExe>
+    <RegAsmExe Condition="'$(RegAsmExe)' == '' and Exists('$(SystemRoot)\Microsoft.NET\Framework\v4.0.30319\regasm.exe')">$(SystemRoot)\Microsoft.NET\Framework\v4.0.30319\regasm.exe</RegAsmExe>
+  </PropertyGroup>
+  <!--
+    Explicitly hooked to the Build target (rather than relying on the
+    legacy "AfterBuild" magic-target-name extension point) so this always
+    fires the same way regardless of which MSBuild host runs the build -
+    including `dotnet build`, which is how this project gets built outside
+    Visual Studio.
+  -->
+  <Target Name="RegisterBinspectionComServer" AfterTargets="Build" Condition="'$(RegAsmExe)' != ''">
+    <!--
+      ContinueOnError so a build run without Administrator rights (regasm
+      needs to write to HKLM) still produces BINSPECTION.dll instead of
+      hard-failing the whole build - regasm is always attempted either way,
+      it just can't complete without elevation. Re-run from an elevated
+      prompt (or install/regsvcs the DLL separately) to actually register
+      it for SolidWorks to load.
+    -->
+    <Exec Command="&quot;$(RegAsmExe)&quot; &quot;$(TargetPath)&quot; /codebase" ContinueOnError="WarnAndContinue" />
+  </Target>
+  <Target Name="WarnIfRegAsmMissing" AfterTargets="Build" Condition="'$(RegAsmExe)' == ''">
+    <Warning Text="regasm.exe was not found at either well-known .NET Framework path - BINSPECTION.dll was built but NOT re-registered for COM interop. SolidWorks may still be using a stale registration." />
+  </Target>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(MSBuildSDKsPath)\Microsoft.NET.Sdk.WindowsDesktop\targets\Microsoft.WinFX.targets" Condition="Exists('$(MSBuildSDKsPath)\Microsoft.NET.Sdk.WindowsDesktop\targets\Microsoft.WinFX.targets')" />
+</Project>

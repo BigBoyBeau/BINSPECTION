@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(where msbuild *)",
+      "Bash(where.exe msbuild *)",
+      "Read(//d//**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft Visual Studio/**)",
+      "Bash(dotnet tool *)",
+      "Bash(powershell -NoProfile -Command \"[guid]::NewGuid\\(\\).ToString\\(\\).ToUpper\\(\\)\")",
+      "PowerShell(& \"D:\\\\Binspection\\\\Installer\\\\build-installer.ps1\")",
+      "Bash(cmd.exe /c \"msiexec /a bin\\\\x64\\\\Release\\\\BINSPECTION.msi /qn TARGETDIR=admin-extract-test\")",
+      "Bash(cmd.exe /c \"msiexec /a bin\\\\x64\\\\Release\\\\BINSPECTION.msi /qn TARGETDIR=D:\\\\Binspection\\\\Installer\\\\admin-extract-test /L*V D:\\\\Binspection\\\\Installer\\\\admin-extract.log\")",
+      "Bash(echo \"exit:$?\")"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+<Window x:Class="BINSPECTION.UI.CreateBalloonsSheetSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="RootWindow"
+        Title="Create Balloons"
+        Height="480" Width="480"
+        MinHeight="340" MinWidth="420"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="Check which sheets to populate with balloons - any unchecked sheet is left completely alone, even if it has dimensions or notes on it. Numbering continues in order across every checked sheet. Optionally reserve a number range for a sheet (or the same range for several sheets) - once that range is filled, numbering continues from the next highest unused number in the whole drawing." />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,4">
+            <Button Content="Select All" Width="80" Margin="0,0,4,0" Click="SelectAll_Click" />
+            <Button Content="Select None" Width="80" Click="SelectNone_Click" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+            <TextBlock Text="From sheet" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <ComboBox x:Name="StartSheetCombo" Width="80" Margin="0,0,10,0" />
+            <TextBlock Text="to sheet" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <ComboBox x:Name="EndSheetCombo" Width="80" Margin="0,0,10,0" />
+            <TextBlock Text="Range" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <TextBox x:Name="SpanRangeStartBox" Width="55" Margin="0,0,2,0" />
+            <TextBlock Text="-" VerticalAlignment="Center" Margin="0,0,2,0" />
+            <TextBox x:Name="SpanRangeEndBox" Width="55" Margin="0,0,10,0" />
+            <Button Content="Apply" Width="60" Click="ApplyRange_Click" />
+        </StackPanel>
+
+        <DataGrid Grid.Row="3"
+                  x:Name="SheetsGrid"
+                  ItemsSource="{Binding Sheets, ElementName=RootWindow}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserSortColumns="False"
+                  HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="Populate" Binding="{Binding IsChecked}" Width="70" />
+                <DataGridTextColumn Header="Sheet" Binding="{Binding Name}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="Range Start" Binding="{Binding RangeStart}" Width="90" />
+                <DataGridTextColumn Header="Range End" Binding="{Binding RangeEnd}" Width="90" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="4"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="Create" Width="80" Margin="0,0,8,0" IsDefault="True" Click="Create_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

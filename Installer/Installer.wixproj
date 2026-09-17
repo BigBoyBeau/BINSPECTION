@@ -1,0 +1,15 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputName>BINSPECTION</OutputName>
+    <Platform>x64</Platform>
+    <ReleaseDir>..\BINSPECTION\bin\Release</ReleaseDir>
+    <DefineConstants>ReleaseDir=$(ReleaseDir)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>

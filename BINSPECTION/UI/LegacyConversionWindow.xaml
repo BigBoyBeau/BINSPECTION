@@ -1,0 +1,53 @@
+<Window x:Class="BINSPECTION.UI.LegacyConversionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="RootWindow"
+        Title="Legacy Conversion"
+        Height="640" Width="820"
+        MinHeight="360" MinWidth="600"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="The Legacy # is what each balloon WILL become. &quot;Matches balloon&quot; shows which existing balloon that will apply to - leave Override blank to use it as shown. Type a different existing balloon number to redirect a row, type &quot;new&quot; to add a brand new characteristic for a legacy number with no existing balloon at all, or type &quot;skip&quot; to leave that legacy number unapplied entirely." />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Load Spreadsheet..." Width="150" Click="LoadSpreadsheet_Click" />
+        </StackPanel>
+
+        <DataGrid x:Name="RowsGrid"
+                  Grid.Row="2"
+                  ItemsSource="{Binding Rows, ElementName=RootWindow}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Legacy #" Binding="{Binding LegacyNumber}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn Header="Nominal (legacy)" Binding="{Binding Nominal}" IsReadOnly="True" Width="110" />
+                <DataGridTextColumn Header="Method" Binding="{Binding Method}" IsReadOnly="True" Width="90" />
+                <DataGridTextColumn Header="Class" Binding="{Binding Class}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn Header="Matches balloon" Binding="{Binding MatchesBalloon}" IsReadOnly="True" Width="1.2*" />
+                <DataGridTextColumn Header="Why" Binding="{Binding Reason}" IsReadOnly="True" Width="1.2*" />
+                <DataGridTextColumn Header="Override (existing balloon #)" Binding="{Binding Assign}" Width="150" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="Apply" Width="80" Margin="0,0,8,0" Click="Apply_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

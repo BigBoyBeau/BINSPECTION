@@ -1,0 +1,160 @@
+<Window x:Class="BINSPECTION.UI.SheetToleranceSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="RootWindow"
+        Title="Sheet Tolerance Selection"
+        Height="700" Width="820"
+        MinHeight="560" MinWidth="700"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="Define one or more Sheet Tolerance sets and assign each sheet to one. Which sheets actually get populated with balloons is chosen in the Create Balloons window instead." />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Sheets -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Text="Sheets" Margin="0,0,0,4" />
+                <DataGrid x:Name="SheetsGrid"
+                          ItemsSource="{Binding Sheets, ElementName=RootWindow}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          CanUserSortColumns="False"
+                          HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Sheet" Binding="{Binding Name}" IsReadOnly="True" Width="*" />
+                        <DataGridTemplateColumn Header="Tolerance Set" Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox ItemsSource="{Binding ToleranceSets, ElementName=RootWindow}"
+                                              DisplayMemberPath="Name"
+                                              SelectedItem="{Binding AssignedSet, Mode=TwoWay}"
+                                              Margin="1" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <!-- Tolerance sets -->
+            <DockPanel Grid.Column="2">
+                <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Text="Sheet Tolerance Sets" Margin="0,0,0,4" />
+
+                <ListBox x:Name="ToleranceSetsList"
+                         DockPanel.Dock="Top"
+                         Height="90"
+                         Margin="0,0,0,4"
+                         ItemsSource="{Binding ToleranceSets, ElementName=RootWindow}"
+                         DisplayMemberPath="Name"
+                         SelectedItem="{Binding SelectedToleranceSet, ElementName=RootWindow, Mode=TwoWay}" />
+
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Content="Add Set" Width="70" Margin="0,0,4,0" Click="AddSet_Click" />
+                    <Button Content="Remove Set" Width="80" Margin="0,0,8,0" Click="RemoveSet_Click" />
+                    <TextBox x:Name="SetNameTextBox" Width="110" Margin="0,0,4,0" />
+                    <Button Content="Rename" Width="60" Click="RenameSet_Click" />
+                </StackPanel>
+
+                <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Text="Tolerances for selected set" Margin="0,4,0,4" />
+
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Add Row" Width="70" Margin="0,0,4,0" Click="AddEntry_Click" />
+                    <Button Content="Remove Row" Width="80" Click="RemoveEntry_Click" />
+                </StackPanel>
+
+                <DataGrid x:Name="EntriesGrid"
+                          ItemsSource="{Binding SelectedEntries, ElementName=RootWindow}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserSortColumns="False"
+                          HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Decimal Places" Binding="{Binding DecimalPlaces}" Width="95" />
+                        <DataGridCheckBoxColumn Header="Angular" Binding="{Binding IsAngular}" Width="60" />
+                        <DataGridTextColumn Header="Tolerance" Binding="{Binding Value, StringFormat=0.#####}" Width="80" />
+                        <DataGridTextColumn Header="Preview" Binding="{Binding Label}" IsReadOnly="True" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
+
+        <GroupBox Grid.Row="2" Header="Inspection Report Header Fields" Margin="0,10,0,0">
+            <Grid Margin="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
+                    <TextBlock Text="Customer" />
+                    <TextBox Text="{Binding Customer, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,8,6">
+                    <TextBlock Text="Report Issued By" />
+                    <TextBox Text="{Binding ReportIssuedBy, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,6">
+                    <TextBlock Text="Lot Size" />
+                    <TextBox Text="{Binding LotSize, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,6">
+                    <TextBlock Text="Sample Size Chart" />
+                    <TextBox Text="{Binding SampleSizeChart, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,8,6">
+                    <TextBlock Text="Sample Size" />
+                    <TextBox Text="{Binding SampleSize, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,6">
+                    <TextBlock Text="Sample Frequency" />
+                    <TextBox Text="{Binding SampleFrequency, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Operator Emp. #" />
+                    <TextBox Text="{Binding OperatorEmployeeNumber, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,8,0">
+                    <TextBlock Text="Inspector Emp. #" />
+                    <TextBox Text="{Binding InspectorEmployeeNumber, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,0">
+                    <TextBlock Text="Cmm Report ID #" />
+                    <TextBox Text="{Binding CmmReportId, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="OK" Width="80" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click" />
+            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

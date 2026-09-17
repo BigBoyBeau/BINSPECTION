@@ -1,0 +1,131 @@
+<Window x:Class="BINSPECTION.UI.BalloonManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="RootWindow"
+        Title="Balloon Manager"
+        Height="680" Width="960"
+        MinHeight="440" MinWidth="720"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="Check the dimensions/balloons to act on, then click a button below. Type a number in &quot;New #&quot; and press Enter to manually assign or move a balloon (e.g. 5 or 5.2, including a grouped one). Method/Classification are editable once a row has a balloon or saved number - type a new Method or Classification to add it to the list for next time, or check several rows and use &quot;Set Method&quot;/&quot;Set Classification&quot; + &quot;Apply to Checked&quot; above to set the same value on all of them at once (leave one of those boxes blank to only set the other). Change a balloon's own &quot;Sheet&quot; dropdown to move its physical balloon note onto a different sheet, if Create Balloons placed it wrong." />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Sheet:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox x:Name="SheetComboBox"
+                      Width="220"
+                      Margin="0,0,20,0"
+                      ItemsSource="{Binding SheetNames, ElementName=RootWindow}"
+                      SelectedItem="{Binding SelectedSheet, ElementName=RootWindow}" />
+
+            <TextBlock Text="Set Method:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox x:Name="BulkMethodCombo"
+                      Width="130"
+                      Margin="0,0,12,0"
+                      IsEditable="True"
+                      IsTextSearchEnabled="False"
+                      ItemsSource="{Binding MethodOptions, ElementName=RootWindow}"
+                      Text="{Binding BulkMethod, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+
+            <TextBlock Text="Set Classification:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox x:Name="BulkClassCombo"
+                      Width="130"
+                      Margin="0,0,12,0"
+                      IsEditable="True"
+                      IsTextSearchEnabled="False"
+                      ItemsSource="{Binding ClassOptions, ElementName=RootWindow}"
+                      Text="{Binding BulkClass, ElementName=RootWindow, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Button Content="Apply to Checked" Width="110" Click="ApplyBulkAttributes_Click" />
+        </StackPanel>
+
+        <DataGrid x:Name="RowsGrid"
+                  Grid.Row="2"
+                  ItemsSource="{Binding Rows, ElementName=RootWindow}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserSortColumns="True"
+                  HeadersVisibility="Column"
+                  CellEditEnding="RowsGrid_CellEditEnding"
+                  SelectionChanged="RowsGrid_SelectionChanged">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="" Binding="{Binding Selected}" Width="30" />
+                <DataGridTextColumn Header="Balloon #" Binding="{Binding DisplayNumber}" IsReadOnly="True" Width="80" />
+                <DataGridTextColumn Header="Dimension" Binding="{Binding DimensionDisplay}" IsReadOnly="True" Width="1.6*" />
+                <DataGridTemplateColumn x:Name="SheetColumn" Header="Sheet" Width="120">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox IsEditable="False"
+                                      IsEnabled="{Binding HasBalloon}"
+                                      ItemsSource="{Binding SheetNames, ElementName=RootWindow}"
+                                      SelectedItem="{Binding SheetName, Mode=TwoWay}"
+                                      SelectionChanged="SheetCombo_SelectionChanged"
+                                      Margin="1" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridCheckBoxColumn Header="Unnumbered" Binding="{Binding IsUnnumbered}" IsReadOnly="True" Width="80" />
+                <DataGridTextColumn Header="Legacy #" Binding="{Binding LegacyNumber}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn x:Name="ManualNumberColumn" Header="New #" Binding="{Binding ManualNumberInput}" Width="70" />
+                <DataGridCheckBoxColumn x:Name="BasicColumn" Header="Basic" Binding="{Binding IsBasic}" Width="45" />
+
+                <DataGridTemplateColumn x:Name="MethodColumn" Header="Method" Width="130">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox IsEditable="True"
+                                      IsTextSearchEnabled="False"
+                                      IsEnabled="{Binding HasCharacteristic}"
+                                      ItemsSource="{Binding MethodOptions, ElementName=RootWindow}"
+                                      Text="{Binding Method, UpdateSourceTrigger=PropertyChanged}"
+                                      LostFocus="AttributeCombo_LostFocus"
+                                      Margin="1" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn x:Name="ClassColumn" Header="Classification" Width="130">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox IsEditable="True"
+                                      IsTextSearchEnabled="False"
+                                      IsEnabled="{Binding HasCharacteristic}"
+                                      ItemsSource="{Binding ClassOptions, ElementName=RootWindow}"
+                                      Text="{Binding Class, UpdateSourceTrigger=PropertyChanged}"
+                                      LostFocus="AttributeCombo_LostFocus"
+                                      Margin="1" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Content="Add" Width="70" Margin="0,0,6,0" Click="Add_Click" />
+                <Button Content="Group" Width="70" Margin="0,0,6,0" Click="Group_Click" />
+                <Button Content="Ungroup" Width="70" Margin="0,0,6,0" Click="Ungroup_Click" />
+                <Button Content="Un-Number" Width="80" Margin="0,0,6,0" Click="MarkUnnumbered_Click" />
+                <Button Content="Re-Number" Width="80" Margin="0,0,6,0" Click="ReNumber_Click" />
+                <Button Content="Legacy Conversion..." Width="140" Margin="0,0,6,0" Click="LegacyConversion_Click" />
+            </StackPanel>
+
+            <Button Grid.Column="1" Content="Close" Width="80" Click="Close_Click" />
+        </Grid>
+    </Grid>
+</Window>
