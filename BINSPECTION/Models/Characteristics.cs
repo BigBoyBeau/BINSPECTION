@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace BINSPECTION.Models
 {
     // One row of persisted balloon/characteristic data.
@@ -72,12 +74,32 @@ namespace BINSPECTION.Models
         // than handing out a fresh number.
         public int? PreGroupNumber { get; set; }
 
-        // The balloon/item number this same characteristic carried in the
-        // legacy inspection system, if it's been matched to one - see
+        // True for a user-grouped member after the group's first one
+        // ("10.1", "10.2") - it has NO balloon note of its own; the group
+        // is shown on the drawing by its anchor's single "10" balloon
+        // (see BalloonGridService.GroupBalloons). Restore/Refresh Balloons
+        // must never recreate a balloon for one of these (see
+        // ReconciliationService.Reconcile). Cleared whenever it leaves the
+        // group and gets its own balloon back. False for a multi-value
+        // balloon's "#n" siblings, which are recognised by their id instead.
+        public bool SharesGroupBalloon { get; set; }
+
+        // The BALLOON NUMBER this same characteristic carried in the legacy
+        // inspection system's spreadsheet (its "DIM #" column - NOT the
+        // "OP <n> (<sheet>)" operation/sheet label some legacy exports
+        // combine into a different column - see LegacyBalloonRow.
+        // OperationLabel/OperationSheetNumber and
+        // LegacyNumberImporter.OpItemPattern's remarks for why those are a
+        // separate concept entirely), if it's been matched to one - see
         // Core/LegacyNumberMatcher.cs and UI/LegacyConversionWindow.xaml.cs.
         // Null until a legacy match run has assigned it. Kept as a string
         // since legacy numbering isn't guaranteed to be a plain integer.
-        public string LegacyNumber { get; set; }
+        // Renamed from LegacyNumber (2026-09-21, to stop conflating this
+        // with the operation/sheet label) - [JsonProperty] keeps the
+        // on-disk JSON key unchanged so an already-saved sidecar file's
+        // "LegacyNumber" values keep loading correctly.
+        [JsonProperty("LegacyNumber")]
+        public string LegacyBalloonNumber { get; set; }
 
         // The literal SolidWorks drawing sheet name (e.g. "Sheet1") the
         // source dimension/annotation lived on when this characteristic was

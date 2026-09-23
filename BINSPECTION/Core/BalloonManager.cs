@@ -33,9 +33,11 @@ namespace BINSPECTION.Core
             IDisplayDimension displayDim,
             int characteristicNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
-            return CreateBalloon(model, displayDim, characteristicNumber.ToString(), sheetName, sourceView);
+            return CreateBalloon(model, displayDim, characteristicNumber.ToString(), sheetName, sourceView, viewsBySheet, existingBalloonIndex);
         }
 
         // Same as above, but takes the display string directly so a
@@ -46,9 +48,11 @@ namespace BINSPECTION.Core
             IDisplayDimension displayDim,
             string displayNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
-            return CreateBalloon(model, (object)displayDim, displayNumber, sheetName, sourceView);
+            return CreateBalloon(model, (object)displayDim, displayNumber, sheetName, sourceView, viewsBySheet, existingBalloonIndex);
         }
 
         // Balloons a GD&T feature control frame - same placement/styling as
@@ -59,9 +63,11 @@ namespace BINSPECTION.Core
             IGtol gtol,
             string displayNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
-            return CreateBalloon(model, (object)gtol, displayNumber, sheetName, sourceView);
+            return CreateBalloon(model, (object)gtol, displayNumber, sheetName, sourceView, viewsBySheet, existingBalloonIndex);
         }
 
         // Balloons a free-standing Note (a callout with a leader to real
@@ -72,9 +78,11 @@ namespace BINSPECTION.Core
             INote sourceNote,
             string displayNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
-            return CreateBalloon(model, (object)sourceNote, displayNumber, sheetName, sourceView);
+            return CreateBalloon(model, (object)sourceNote, displayNumber, sheetName, sourceView, viewsBySheet, existingBalloonIndex);
         }
 
         // Balloons a surface finish symbol - same placement/styling as a
@@ -84,9 +92,11 @@ namespace BINSPECTION.Core
             ISFSymbol surfaceFinish,
             string displayNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
-            return CreateBalloon(model, (object)surfaceFinish, displayNumber, sheetName, sourceView);
+            return CreateBalloon(model, (object)surfaceFinish, displayNumber, sheetName, sourceView, viewsBySheet, existingBalloonIndex);
         }
 
         // Common implementation shared by every CreateBalloon overload
@@ -127,37 +137,82 @@ namespace BINSPECTION.Core
             object annotationSource,
             string displayNumber,
             string sheetName = null,
-            View sourceView = null)
+            View sourceView = null,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            Dictionary<string, Note> existingBalloonIndex = null)
         {
             LastFailureReason = null;
 
             if (model == null || annotationSource == null)
-            {
-                LastFailureReason = "model or annotation source was null";
-                return null;
-            }
+                return Fail("CreateBalloon", "model or annotation source was null", model, null);
 
-            DrawingSheetHelper.ActivateSheet(model as DrawingDoc, sheetName);
+            DrawingDoc drawing = model as DrawingDoc;
 
-            // Prevent duplicate characteristic numbers
-            Note existing =
-                FindExistingBalloon(
-                    model,
-                    displayNumber);
+            if (drawing == null)
+                return Fail("CreateBalloon", "the document is not a drawing", model, null);
 
-            if (existing != null)
-                return existing;
+            // Set once InsertNote succeeds. Any failure AFTER that point
+            // (GetAnnotation, placement, layer/styling, or an exception)
+            // deletes it again via Fail's rollback - otherwise a half-built
+            // note is left on the drawing with no Characteristic pointing at
+            // it, which the next run can mistake for "an existing balloon"
+            // with that number.
+            Note note = null;
 
             try
             {
+                if (!string.IsNullOrEmpty(sheetName) && !DrawingSheetHelper.ActivateSheet(drawing, sheetName))
+                {
+                    BinspectionLog.Warn("CreateBalloon",
+                        "could not activate sheet '" + sheetName + "' for balloon \"" + displayNumber +
+                        "\" - it will be created on whichever sheet is currently active");
+                }
+
+                // Prevent duplicate characteristic numbers. existingBalloonIndex
+                // (optional): a lookup BuildExistingBalloonIndex already built
+                // once for the whole run, so a caller placing MANY balloons in
+                // one pass (OnCreateBalloons, ReconciliationService.
+                // RecreateMissingBalloons) gets an O(1) check per balloon
+                // instead of FindExistingBalloon's full walk of every
+                // annotation on every sheet, EVERY TIME - which is what made a
+                // large Create Balloons run's total duplicate-checking cost
+                // grow with the SQUARE of how many balloons it placed, slow
+                // enough on a big drawing to look like the add-in had hung.
+                //
+                // Inside the try (it used to run before it): the per-call
+                // walk makes a lot of COM calls, and an exception from it
+                // escaped CreateBalloon entirely instead of coming back as a
+                // null + LastFailureReason like every other failure.
+                Note existing;
+
+                if (existingBalloonIndex != null)
+                {
+                    existingBalloonIndex.TryGetValue(displayNumber, out existing);
+                }
+                else
+                {
+                    existing = FindExistingBalloon(model, displayNumber, viewsBySheet);
+                }
+
+                if (existing != null)
+                {
+                    // Not a failure, but it IS drawing/JSON drift worth
+                    // seeing - the caller is about to treat this pre-existing
+                    // balloon as the one it just asked for.
+                    BinspectionLog.Warn("CreateBalloon",
+                        "balloon \"" + displayNumber + "\" already exists on the drawing - reused it instead of creating a new one");
+
+                    return existing;
+                }
+
                 Annotation sourceAnnotation =
                     GetSourceAnnotation(annotationSource);
 
                 if (sourceAnnotation == null)
                 {
-                    LastFailureReason =
-                        "GetSourceAnnotation returned null (unrecognized annotation type or GetAnnotation() failed)";
-                    return null;
+                    return Fail("CreateBalloon",
+                        "GetSourceAnnotation returned null (unrecognized annotation type or GetAnnotation() failed)",
+                        model, null);
                 }
 
                 double[] pos =
@@ -165,13 +220,10 @@ namespace BINSPECTION.Core
 
                 if (pos == null || pos.Length < 3)
                 {
-                    LastFailureReason =
-                        "source annotation GetPosition() returned null/invalid on sheet '" + sheetName + "'";
-                    return null;
+                    return Fail("CreateBalloon",
+                        "source annotation GetPosition() returned null/invalid on sheet '" + sheetName + "'",
+                        model, null);
                 }
-
-                string text =
-                    displayNumber;
 
                 // Selecting the source's own placed view before InsertNote
                 // is what makes the new Note attach to THAT view instead of
@@ -182,50 +234,96 @@ namespace BINSPECTION.Core
                 // parameter InsertNote also lacks). Best-effort: a null
                 // sourceView (caller didn't have one) or a failed select
                 // just falls back to the old floating-note behavior rather
-                // than failing the balloon.
+                // than failing the balloon. Always clears the selection
+                // first, even with no view - see SelectViewForAttachment.
                 SelectViewForAttachment(model, sourceView);
 
-                Note note =
-                    (Note)model.InsertNote(text);
+                note =
+                    (Note)model.InsertNote(displayNumber);
+
+                ClearSelection(model);
 
                 if (note == null)
                 {
-                    LastFailureReason =
-                        "InsertNote(\"" + text + "\") returned null on sheet '" + sheetName + "'";
-                    return null;
+                    return Fail("CreateBalloon",
+                        "InsertNote(\"" + displayNumber + "\") returned null on sheet '" + sheetName + "'",
+                        model, null);
                 }
 
                 Annotation balloonAnnotation =
                     (Annotation)note.GetAnnotation();
 
                 if (balloonAnnotation == null)
-                {
-                    LastFailureReason = "new note's GetAnnotation() returned null";
-                    return null;
-                }
+                    return Fail("CreateBalloon", "new note's GetAnnotation() returned null", model, note);
 
                 double[] placedPos =
                     BalloonPlacementService.ComputePosition(
                         annotationSource, sourceAnnotation, pos, displayNumber);
+
+                if (placedPos == null || placedPos.Length < 3)
+                    return Fail("CreateBalloon", "BalloonPlacementService returned no position", model, note);
 
                 balloonAnnotation.SetPosition(
                     placedPos[0],
                     placedPos[1],
                     placedPos[2]);
 
-                ApplyBalloonStyle(model, note, balloonAnnotation);
+                // The Binspection layer is what makes this note findable as
+                // a balloon at all (see IsBinspectionBalloon) - a note that
+                // didn't land on it would be invisible to every later
+                // find/delete, so it's rolled back rather than kept.
+                if (!ApplyBalloonStyle(model, note, balloonAnnotation))
+                {
+                    return Fail("CreateBalloon",
+                        "could not place balloon \"" + displayNumber + "\" on the '" + BalloonLayerName + "' layer",
+                        model, note);
+                }
+
+                // Keep the shared index in sync as balloons are created, so
+                // the NEXT item in this same run sees this one too - not
+                // just whatever already existed before the run started.
+                if (existingBalloonIndex != null)
+                    existingBalloonIndex[displayNumber] = note;
 
                 return note;
             }
             catch (Exception ex)
             {
-                LastFailureReason = ex.GetType().Name + ": " + ex.Message;
+                BinspectionLog.Error("CreateBalloon(\"" + displayNumber + "\", sheet '" + sheetName + "')", ex);
 
-                System.Diagnostics.Debug.WriteLine(
-                    $"CreateBalloon Error: {ex}");
-
-                return null;
+                return Fail("CreateBalloon", ex.GetType().Name + ": " + ex.Message, model, note);
             }
+        }
+
+        // Records a failure for the caller (LastFailureReason), writes it to
+        // the persistent log, and - if a note was already inserted before
+        // the failure - deletes that note again so a failed call never
+        // leaves an orphaned, half-styled note behind. Always returns null
+        // so call sites can `return Fail(...)` directly.
+        private Note Fail(string context, string reason, ModelDoc2 model, Note createdNote)
+        {
+            if (createdNote != null)
+            {
+                bool rolledBack = false;
+
+                try
+                {
+                    rolledBack = DeleteAnnotation(model, createdNote.GetAnnotation() as Annotation, context + " rollback");
+                }
+                catch (Exception ex)
+                {
+                    BinspectionLog.Error(context + " rollback", ex);
+                }
+
+                if (!rolledBack)
+                    reason += " (and the partially-created note could NOT be removed - check the drawing for a stray note)";
+            }
+
+            LastFailureReason = reason;
+
+            BinspectionLog.Warn(context, reason);
+
+            return null;
         }
 
         // Moves an already-placed balloon note from whichever sheet it's
@@ -244,90 +342,110 @@ namespace BINSPECTION.Core
         // The new note is created (and styled/layered the same as any other
         // balloon - see ApplyBalloonStyle) BEFORE the old one is deleted, so
         // a failure partway through never leaves the balloon completely
-        // gone - only once the new note exists is the old one removed.
+        // gone - only once the new note exists is the old one removed. If
+        // the old note then can't be deleted, the NEW one is rolled back
+        // instead and the move reports failure - it used to log that to
+        // Debug only and return success, leaving two balloons with the same
+        // number on two different sheets.
         // Returns the new Note, or null (with LastFailureReason set) on
         // failure.
         public Note MoveBalloon(ModelDoc2 model, string displayNumber, string targetSheetName)
         {
             LastFailureReason = null;
 
-            if (model == null || string.IsNullOrEmpty(targetSheetName))
-            {
-                LastFailureReason = "model or target sheet name was null";
-                return null;
-            }
+            DrawingDoc drawing = model as DrawingDoc;
+
+            if (drawing == null || string.IsNullOrEmpty(targetSheetName))
+                return Fail("MoveBalloon", "model was not a drawing, or target sheet name was null", model, null);
+
+            Note newNote = null;
 
             try
             {
+                string sourceSheetName;
+                int matchCount;
+
                 Note existingNote =
-                    FindExistingBalloon(model, displayNumber);
+                    FindBalloon(drawing, displayNumber, null, out sourceSheetName, out matchCount);
 
                 if (existingNote == null)
                 {
-                    LastFailureReason =
-                        "could not find an existing balloon numbered \"" + displayNumber + "\"";
-                    return null;
+                    return Fail("MoveBalloon",
+                        "could not find an existing balloon numbered \"" + displayNumber + "\"", model, null);
+                }
+
+                if (matchCount > 1)
+                {
+                    BinspectionLog.Warn("MoveBalloon",
+                        matchCount + " balloons are numbered \"" + displayNumber + "\" - moving the one on sheet '" +
+                        sourceSheetName + "'");
                 }
 
                 Annotation existingAnnotation =
                     (Annotation)existingNote.GetAnnotation();
 
+                if (existingAnnotation == null)
+                    return Fail("MoveBalloon", "existing balloon's GetAnnotation() returned null", model, null);
+
                 double[] pos =
-                    existingAnnotation != null ? (double[])existingAnnotation.GetPosition() : null;
+                    (double[])existingAnnotation.GetPosition();
 
-                if (!DrawingSheetHelper.ActivateSheet(model as DrawingDoc, targetSheetName))
-                {
-                    LastFailureReason = "could not activate sheet '" + targetSheetName + "'";
-                    return null;
-                }
+                if (!DrawingSheetHelper.ActivateSheet(drawing, targetSheetName))
+                    return Fail("MoveBalloon", "could not activate sheet '" + targetSheetName + "'", model, null);
 
-                Note newNote =
+                ClearSelection(model);
+
+                newNote =
                     (Note)model.InsertNote(displayNumber);
+
+                ClearSelection(model);
 
                 if (newNote == null)
                 {
-                    LastFailureReason =
-                        "InsertNote(\"" + displayNumber + "\") returned null on sheet '" + targetSheetName + "'";
-                    return null;
+                    return Fail("MoveBalloon",
+                        "InsertNote(\"" + displayNumber + "\") returned null on sheet '" + targetSheetName + "'",
+                        model, null);
                 }
 
                 Annotation newAnnotation =
                     (Annotation)newNote.GetAnnotation();
 
                 if (newAnnotation == null)
-                {
-                    LastFailureReason = "new note's GetAnnotation() returned null";
-                    return null;
-                }
+                    return Fail("MoveBalloon", "new note's GetAnnotation() returned null", model, newNote);
 
                 if (pos != null && pos.Length >= 3)
                     newAnnotation.SetPosition(pos[0], pos[1], pos[2]);
 
-                ApplyBalloonStyle(model, newNote, newAnnotation);
-
-                try
+                if (!ApplyBalloonStyle(model, newNote, newAnnotation))
                 {
-                    existingAnnotation.Select3(false, null);
-
-                    model.Extension.DeleteSelection2(
-                        (int)swDeleteSelectionOptions_e.swDelete_Absorbed);
+                    return Fail("MoveBalloon",
+                        "could not place the moved balloon on the '" + BalloonLayerName + "' layer", model, newNote);
                 }
-                catch (Exception ex)
+
+                // Delete the old note with its own sheet active - the same
+                // "only trust the active sheet" rule every other sheet-
+                // sensitive call in this add-in follows.
+                if (!string.IsNullOrEmpty(sourceSheetName))
+                    DrawingSheetHelper.ActivateSheet(drawing, sourceSheetName);
+
+                bool oldDeleted = DeleteAnnotation(model, existingAnnotation, "MoveBalloon (old note)");
+
+                DrawingSheetHelper.ActivateSheet(drawing, targetSheetName);
+
+                if (!oldDeleted)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"MoveBalloon: failed to delete old note on the source sheet: {ex}");
+                    return Fail("MoveBalloon",
+                        "the original balloon on sheet '" + sourceSheetName + "' could not be deleted, so the move was cancelled",
+                        model, newNote);
                 }
 
                 return newNote;
             }
             catch (Exception ex)
             {
-                LastFailureReason = ex.GetType().Name + ": " + ex.Message;
+                BinspectionLog.Error("MoveBalloon(\"" + displayNumber + "\" -> '" + targetSheetName + "')", ex);
 
-                System.Diagnostics.Debug.WriteLine(
-                    $"MoveBalloon Error: {ex}");
-
-                return null;
+                return Fail("MoveBalloon", ex.GetType().Name + ": " + ex.Message, model, newNote);
             }
         }
 
@@ -335,13 +453,18 @@ namespace BINSPECTION.Core
         // attaches its new Note to that view (SelectByID2 + "DRAWINGVIEW" is
         // the standard SolidWorks API technique for selecting a placed
         // drawing view by name - there's no InsertNote overload that takes a
-        // view directly). Clears any prior selection first so a stale
-        // selection from earlier in the same command can't get INSTEAD
-        // attached to. Failures (view already deleted, name lookup throws,
-        // etc.) are swallowed - the balloon still gets created, just as a
-        // floating sheet-level note like before this feature existed.
+        // view directly). ALWAYS clears any prior selection first - even
+        // with no view to select - since InsertNote attaches its new note to
+        // whatever is selected at call time: a dimension/edge the user had
+        // selected (every Balloon Manager path passes no view) would
+        // otherwise get the balloon attached to IT. Select failures (view
+        // already deleted, name lookup throws, etc.) are logged, not fatal -
+        // the balloon still gets created, just as a floating sheet-level
+        // note like before this feature existed.
         private static void SelectViewForAttachment(ModelDoc2 model, View sourceView)
         {
+            ClearSelection(model);
+
             if (sourceView == null)
                 return;
 
@@ -352,13 +475,28 @@ namespace BINSPECTION.Core
                 if (string.IsNullOrEmpty(viewName))
                     return;
 
-                model.ClearSelection2(true);
-
-                model.Extension.SelectByID2(
-                    viewName, "DRAWINGVIEW", 0, 0, 0, false, 0, null, 0);
+                if (!model.Extension.SelectByID2(
+                    viewName, "DRAWINGVIEW", 0, 0, 0, false, 0, null, 0))
+                {
+                    BinspectionLog.Warn("SelectViewForAttachment",
+                        "could not select view '" + viewName + "' - balloon will be a floating sheet-level note");
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                BinspectionLog.Error("SelectViewForAttachment", ex);
+            }
+        }
+
+        private static void ClearSelection(ModelDoc2 model)
+        {
+            try
+            {
+                model?.ClearSelection2(true);
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("ClearSelection", ex);
             }
         }
 
@@ -398,6 +536,64 @@ namespace BINSPECTION.Core
         // signal.
         public const string BalloonLayerName = "Binspection";
 
+        // The ONE definition of "this annotation is a BINSPECTION balloon",
+        // shared by every find/index/orphan-scan (FindExistingBalloon,
+        // BuildExistingBalloonIndex, ReconciliationService.FindOrphanedBalloons).
+        // Those used to match on note TEXT alone, while every delete matched
+        // on LAYER alone - so a user's own plain note reading "12" (or a
+        // SOLIDWORKS Inspection add-in balloon) counted as "balloon 12
+        // already exists" and silently blocked the real one from being
+        // created, and Reconcile would even offer to delete it as an
+        // "orphan". Requires: not title-block/sheet-format content, a Note,
+        // on the Binspection layer, and text matching BalloonTextPattern.
+        // displayNumber is the matched number ("12" / "12.2").
+        public static bool IsBinspectionBalloon(Annotation annotation, out Note note, out string displayNumber)
+        {
+            note = null;
+            displayNumber = null;
+
+            if (annotation == null)
+                return false;
+
+            if (AnnotationScanner.IsOwnedBySheetFormat(annotation))
+                return false;
+
+            if (!IsOnBalloonLayer(annotation))
+                return false;
+
+            Note candidate =
+                annotation.GetSpecificAnnotation() as Note;
+
+            if (candidate == null)
+                return false;
+
+            // Extract the number via the regex rather than comparing the
+            // whole string - more forgiving of incidental formatting
+            // differences, and normalizes away any formatting markup
+            // SolidWorks may have embedded in the text after a save/reopen
+            // cycle (see NormalizeNoteText).
+            Match match =
+                BalloonTextPattern.Match(NormalizeNoteText(candidate.GetText()));
+
+            if (!match.Success)
+                return false;
+
+            note = candidate;
+            displayNumber = match.Groups[1].Value;
+
+            return true;
+        }
+
+        // Layer-only half of IsBinspectionBalloon - used on its own by the
+        // bulk deletes (DeleteAllBalloons), which deliberately also remove a
+        // balloon whose text was hand-edited into something that no longer
+        // looks like a number.
+        public static bool IsOnBalloonLayer(IAnnotation annotation)
+        {
+            return annotation != null &&
+                string.Equals(annotation.Layer, BalloonLayerName, StringComparison.OrdinalIgnoreCase);
+        }
+
         // Gets (or creates) the shared "Binspection" layer on this
         // drawing, keeping its color in sync with the balloon color below.
         // ILayerMgr comes off IModelDoc2 (not IDrawingDoc/IModelDocExtension -
@@ -414,7 +610,10 @@ namespace BINSPECTION.Core
                     ((IModelDoc2)model).IGetLayerManager();
 
                 if (layerMgr == null)
+                {
+                    BinspectionLog.Warn("EnsureBalloonLayer", "IGetLayerManager returned null");
                     return;
+                }
 
                 Layer layer =
                     layerMgr.IGetLayer(BalloonLayerName);
@@ -427,6 +626,11 @@ namespace BINSPECTION.Core
                         colorRef,
                         0,
                         0);
+
+                    if (layerMgr.IGetLayer(BalloonLayerName) == null)
+                    {
+                        BinspectionLog.Warn("EnsureBalloonLayer", "AddLayer('" + BalloonLayerName + "') failed");
+                    }
                 }
                 else if (layer.Color != colorRef)
                 {
@@ -435,8 +639,7 @@ namespace BINSPECTION.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"EnsureBalloonLayer Error: {ex}");
+                BinspectionLog.Error("EnsureBalloonLayer", ex);
             }
         }
 
@@ -449,27 +652,50 @@ namespace BINSPECTION.Core
         // single Color property. Every balloon is also placed on the
         // shared "Binspection" layer (see EnsureBalloonLayer), created
         // with the same red color if it doesn't already exist.
-        private static void ApplyBalloonStyle(ModelDoc2 model, Note note, Annotation annotation)
+        //
+        // Each step has its own try, so a failed SetBalloon (cosmetic) can
+        // no longer skip the layer assignment (essential). Returns whether
+        // the note actually ended up on the Binspection layer - the one
+        // step callers must treat as fatal, since IsBinspectionBalloon
+        // can't find a balloon that isn't on it.
+        private static bool ApplyBalloonStyle(ModelDoc2 model, Note note, Annotation annotation)
         {
+            int red =
+                ColorTranslator.ToWin32(Color.Red);
+
             try
             {
                 note.SetBalloon(
                     (int)swBalloonStyle_e.swBS_Inspection,
                     (int)swBalloonFit_e.swBF_Tightest);
-
-                int red =
-                    ColorTranslator.ToWin32(Color.Red);
-
-                annotation.Color = red;
-
-                EnsureBalloonLayer(model, red);
-
-                annotation.Layer = BalloonLayerName;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"ApplyBalloonStyle Error: {ex}");
+                BinspectionLog.Error("ApplyBalloonStyle: SetBalloon", ex);
+            }
+
+            try
+            {
+                annotation.Color = red;
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("ApplyBalloonStyle: Color", ex);
+            }
+
+            EnsureBalloonLayer(model, red);
+
+            try
+            {
+                annotation.Layer = BalloonLayerName;
+
+                return IsOnBalloonLayer(annotation);
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("ApplyBalloonStyle: Layer", ex);
+
+                return false;
             }
         }
 
@@ -491,58 +717,155 @@ namespace BINSPECTION.Core
         // leaving the JSON record "gone" while the balloon note stayed on
         // the drawing. See AnnotationScanner's class remarks - the same gap
         // it fixed for the Create Balloons scan.
+        // viewsBySheet (optional): a list already computed by
+        // DrawingSheetHelper.GetAllViewsBySheet, so a caller checking many
+        // display numbers in one run (CreateBalloon's own duplicate check,
+        // called once per balloon placed; ReconciliationService.Reconcile,
+        // called once per saved characteristic) can compute it ONCE and
+        // share it, rather than every call re-activating every sheet in the
+        // drawing all over again - same reasoning as
+        // AnnotationScanner.WalkAllAnnotations' matching parameter.
         public Note FindExistingBalloon(
             ModelDoc2 model,
-            string displayNumber)
+            string displayNumber,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null)
         {
             DrawingDoc drawing = model as DrawingDoc;
 
             if (drawing == null)
                 return null;
 
-            Note found = null;
+            string sheetName;
+            int matchCount;
 
-            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view) =>
+            Note found = FindBalloon(drawing, displayNumber, viewsBySheet, out sheetName, out matchCount);
+
+            if (matchCount > 1)
             {
-                if (found != null)
-                    return;
-
-                // Title-block/border content (e.g. a plain numeric drawing
-                // zone reference marker) gets mixed into this same walk -
-                // exclude it so it can never masquerade as "an existing
-                // balloon" for whatever number it happens to look like. See
-                // AnnotationScanner.IsOwnedBySheetFormat's remarks.
-                if (AnnotationScanner.IsOwnedBySheetFormat(annotation))
-                    return;
-
-                Note note =
-                    annotation.GetSpecificAnnotation()
-                        as Note;
-
-                if (note == null)
-                    return;
-
-                // Extract the number via the same regex used to detect
-                // orphaned balloons, rather than comparing the whole string -
-                // more forgiving of incidental formatting differences (extra
-                // whitespace inside the parens, etc.) as long as the number
-                // itself matches, and normalizes away any formatting markup
-                // SolidWorks may have embedded in the text after a
-                // save/reopen cycle.
-                string normalizedText =
-                    NormalizeNoteText(note.GetText());
-
-                Match match =
-                    BalloonTextPattern.Match(normalizedText);
-
-                if (match.Success &&
-                    match.Groups[1].Value == displayNumber)
-                {
-                    found = note;
-                }
-            });
+                BinspectionLog.Warn("FindExistingBalloon",
+                    matchCount + " separate balloons are numbered \"" + displayNumber +
+                    "\" - using the first one found (sheet '" + sheetName + "')");
+            }
 
             return found;
+        }
+
+        // FindExistingBalloon's walk, also reporting which sheet the first
+        // match was found on and how many DISTINCT balloons carry that
+        // number (a duplicate number on the drawing is a data-integrity
+        // problem the caller may want to report). A sheet-level note is
+        // visited once per view on its sheet, so matches are de-duplicated
+        // by sheet + position rather than just counted.
+        private static Note FindBalloon(
+            DrawingDoc drawing,
+            string displayNumber,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet,
+            out string foundSheetName,
+            out int matchCount)
+        {
+            Note found = null;
+            string foundSheet = null;
+            HashSet<string> distinctMatches = new HashSet<string>();
+
+            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view, sheetName) =>
+            {
+                Note note;
+                string number;
+
+                if (!IsBinspectionBalloon(annotation, out note, out number) || number != displayNumber)
+                    return;
+
+                distinctMatches.Add(BalloonIdentityKey(annotation, sheetName));
+
+                if (found == null)
+                {
+                    found = note;
+                    foundSheet = sheetName;
+                }
+            }, viewsBySheet);
+
+            foundSheetName = foundSheet;
+            matchCount = distinctMatches.Count;
+
+            return found;
+        }
+
+        // Same walk as FindExistingBalloon, but ONE pass that indexes every
+        // balloon on the drawing by its display number, instead of a fresh
+        // walk per number looked up. Build this ONCE per run and pass it as
+        // CreateBalloon's existingBalloonIndex for any caller about to place
+        // more than a handful of balloons in a row (OnCreateBalloons,
+        // ReconciliationService.RecreateMissingBalloons) - see
+        // CreateBalloon's remarks for why the per-call walk doesn't scale to
+        // a large run. Two distinct balloons sharing one number used to be
+        // silently collapsed to whichever was visited last; the first one
+        // found is now kept and the duplicate is logged.
+        public Dictionary<string, Note> BuildExistingBalloonIndex(
+            DrawingDoc drawing,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null)
+        {
+            Dictionary<string, Note> index =
+                new Dictionary<string, Note>(StringComparer.OrdinalIgnoreCase);
+
+            if (drawing == null)
+                return index;
+
+            Dictionary<string, string> identityByNumber =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> duplicateNumbers = new HashSet<string>();
+
+            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view, sheetName) =>
+            {
+                Note note;
+                string number;
+
+                if (!IsBinspectionBalloon(annotation, out note, out number))
+                    return;
+
+                string identity = BalloonIdentityKey(annotation, sheetName);
+                string firstIdentity;
+
+                if (!identityByNumber.TryGetValue(number, out firstIdentity))
+                {
+                    identityByNumber[number] = identity;
+                    index[number] = note;
+                }
+                else if (firstIdentity != identity)
+                {
+                    duplicateNumbers.Add(number);
+                }
+            }, viewsBySheet);
+
+            if (duplicateNumbers.Count > 0)
+            {
+                BinspectionLog.Warn("BuildExistingBalloonIndex",
+                    "more than one balloon on the drawing carries each of these numbers: " +
+                    string.Join(", ", duplicateNumbers));
+            }
+
+            return index;
+        }
+
+        // Identifies one physical balloon across repeated per-view visits of
+        // the same sheet-level note: its sheet plus its rounded sheet-space
+        // position. (COM wrapper identity isn't reliable for this - SolidWorks
+        // can hand back a fresh wrapper for the same annotation.)
+        private static string BalloonIdentityKey(Annotation annotation, string sheetName)
+        {
+            try
+            {
+                double[] pos = annotation.GetPosition() as double[];
+
+                if (pos != null && pos.Length >= 2)
+                    return sheetName + "|" + Math.Round(pos[0], 6) + "|" + Math.Round(pos[1], 6);
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("BalloonIdentityKey", ex);
+            }
+
+            return sheetName + "|?";
         }
 
         // SolidWorks can embed formatting markup (things like "<A:1>" or
@@ -578,31 +901,81 @@ namespace BINSPECTION.Core
         {
             try
             {
-                Note note =
-                    FindExistingBalloon(
-                        model,
-                        displayNumber);
+                Note note = FindExistingBalloon(model, displayNumber);
 
                 if (note == null)
+                {
+                    BinspectionLog.Warn("DeleteBalloon",
+                        "no balloon numbered \"" + displayNumber + "\" was found on the drawing - nothing deleted");
+                    return false;
+                }
+
+                return DeleteBalloon(model, note);
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("DeleteBalloon(\"" + displayNumber + "\")", ex);
+                return false;
+            }
+        }
+
+        // Same as above for a caller that already resolved the Note (e.g.
+        // from a BuildExistingBalloonIndex lookup), skipping the per-call
+        // FindExistingBalloon walk. Returns true only if SolidWorks actually
+        // reported the delete as done (it used to return true regardless).
+        public bool DeleteBalloon(
+            ModelDoc2 model,
+            Note note)
+        {
+            try
+            {
+                if (model == null || note == null)
                     return false;
 
-                Annotation ann =
-                    (Annotation)note.GetAnnotation();
+                return DeleteAnnotation(model, (Annotation)note.GetAnnotation(), "DeleteBalloon");
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("DeleteBalloon(note)", ex);
+                return false;
+            }
+        }
 
-                if (ann == null)
+        // The single select-then-delete used by every delete path in this
+        // class, checking BOTH SolidWorks return values - Select3 (did the
+        // annotation actually get selected?) and DeleteSelection2 (did the
+        // delete actually happen?). Every caller used to ignore both and
+        // report success anyway. Logs the reason on any failure.
+        private static bool DeleteAnnotation(ModelDoc2 model, Annotation annotation, string context)
+        {
+            if (model == null || annotation == null)
+            {
+                BinspectionLog.Warn(context, "nothing to delete (model or annotation was null)");
+                return false;
+            }
+
+            try
+            {
+                if (!annotation.Select3(false, null))
+                {
+                    BinspectionLog.Warn(context, "Select3 returned false - annotation could not be selected for deletion");
                     return false;
+                }
 
-                ann.Select3(
-                    false,
-                    null);
-
-                model.Extension.DeleteSelection2(
-                    (int)swDeleteSelectionOptions_e.swDelete_Absorbed);
+                if (!model.Extension.DeleteSelection2(
+                    (int)swDeleteSelectionOptions_e.swDelete_Absorbed))
+                {
+                    BinspectionLog.Warn(context, "DeleteSelection2 returned false - annotation was selected but not deleted");
+                    ClearSelection(model);
+                    return false;
+                }
 
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                BinspectionLog.Error(context, ex);
+                ClearSelection(model);
                 return false;
             }
         }
@@ -618,16 +991,16 @@ namespace BINSPECTION.Core
         // up by non-Note annotations. Collects matches into a list before
         // deleting any of them, since deleting an annotation while still
         // walking the live annotation chain (annotation.GetNext3()) is not
-        // safe. Returns how many balloons were deleted.
+        // safe. Returns how many balloons were ACTUALLY deleted.
         //
         // Walks every view on every sheet (AnnotationScanner.WalkAllAnnotations)
         // rather than the old document-level GetFirstAnnotation2 walk - see
         // FindExistingBalloon's remarks for why that missed anything not on
         // the currently-active sheet. A sheet-level balloon note can surface
-        // more than once this way (once per view on its sheet); duplicate
-        // entries are harmless here since a second Select3/DeleteSelection2
-        // on an already-deleted annotation just throws, which is caught
-        // below same as any other per-item failure.
+        // more than once this way (once per view on its sheet) - those
+        // repeat visits are collapsed by BalloonIdentityKey before deleting,
+        // so the returned count is no longer inflated by them and a failed
+        // second delete of an already-deleted note isn't logged as an error.
         public int DeleteAllBalloons(ModelDoc2 model)
         {
             DrawingDoc drawing = model as DrawingDoc;
@@ -635,43 +1008,39 @@ namespace BINSPECTION.Core
             if (drawing == null)
                 return 0;
 
-            List<Annotation> balloons = new List<Annotation>();
+            Dictionary<string, Annotation> balloons = new Dictionary<string, Annotation>();
 
-            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view) =>
+            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view, sheetName) =>
             {
-                try
-                {
-                    if (string.Equals(
-                        annotation.Layer,
-                        BalloonLayerName,
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        balloons.Add(annotation);
-                    }
-                }
-                catch
-                {
-                }
+                if (!IsOnBalloonLayer(annotation))
+                    return;
+
+                string key = BalloonIdentityKey(annotation, sheetName);
+
+                if (!balloons.ContainsKey(key))
+                    balloons[key] = annotation;
             });
 
+            return DeleteCollected(model, balloons.Values, "DeleteAllBalloons");
+        }
+
+        // Deletes each collected annotation individually (one bad item
+        // never stops the rest) and logs one summary line if any failed.
+        private static int DeleteCollected(ModelDoc2 model, ICollection<Annotation> annotations, string context)
+        {
             int deletedCount = 0;
 
-            foreach (Annotation ann in balloons)
+            foreach (Annotation ann in annotations)
             {
-                try
-                {
-                    ann.Select3(
-                        false,
-                        null);
-
-                    model.Extension.DeleteSelection2(
-                        (int)swDeleteSelectionOptions_e.swDelete_Absorbed);
-
+                if (DeleteAnnotation(model, ann, context))
                     deletedCount++;
-                }
-                catch
-                {
-                }
+            }
+
+            if (deletedCount < annotations.Count)
+            {
+                BinspectionLog.Warn(context,
+                    (annotations.Count - deletedCount) + " of " + annotations.Count +
+                    " balloon(s) on the '" + BalloonLayerName + "' layer could not be deleted");
             }
 
             return deletedCount;
@@ -727,61 +1096,56 @@ namespace BINSPECTION.Core
             {
                 originalSheetName = drawing.IGetCurrentSheet()?.GetName();
             }
-            catch
+            catch (Exception ex)
             {
+                BinspectionLog.Error("DeleteAllBalloons(sheets): reading current sheet", ex);
             }
 
-            foreach (string sheetName in sheetNames)
+            try
             {
-                if (!DrawingSheetHelper.ActivateSheet(drawing, sheetName))
-                    continue;
-
-                Annotation annotation = model.IGetFirstAnnotation2();
-
-                while (annotation != null)
+                foreach (string sheetName in sheetNames)
                 {
+                    if (!DrawingSheetHelper.ActivateSheet(drawing, sheetName))
+                    {
+                        BinspectionLog.Warn("DeleteAllBalloons(sheets)",
+                            "could not activate sheet '" + sheetName + "' - its balloons were NOT deleted");
+                        continue;
+                    }
+
+                    // Per-sheet guard: a chain that throws partway keeps
+                    // what it already collected and moves to the next sheet.
                     try
                     {
-                        if (string.Equals(
-                            annotation.Layer,
-                            BalloonLayerName,
-                            StringComparison.OrdinalIgnoreCase))
+                        Annotation annotation = model.IGetFirstAnnotation2();
+
+                        while (annotation != null)
                         {
-                            balloons.Add(annotation);
+                            try
+                            {
+                                if (IsOnBalloonLayer(annotation))
+                                    balloons.Add(annotation);
+                            }
+                            catch (Exception ex)
+                            {
+                                BinspectionLog.Error("DeleteAllBalloons(sheets): reading an annotation on sheet '" + sheetName + "'", ex);
+                            }
+
+                            annotation = annotation.GetNext3();
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        BinspectionLog.Error("DeleteAllBalloons(sheets): walking sheet '" + sheetName + "'", ex);
                     }
-
-                    annotation = annotation.GetNext3();
                 }
             }
-
-            if (!string.IsNullOrEmpty(originalSheetName))
-                DrawingSheetHelper.ActivateSheet(drawing, originalSheetName);
-
-            int deletedCount = 0;
-
-            foreach (Annotation ann in balloons)
+            finally
             {
-                try
-                {
-                    ann.Select3(
-                        false,
-                        null);
-
-                    model.Extension.DeleteSelection2(
-                        (int)swDeleteSelectionOptions_e.swDelete_Absorbed);
-
-                    deletedCount++;
-                }
-                catch
-                {
-                }
+                if (!string.IsNullOrEmpty(originalSheetName))
+                    DrawingSheetHelper.ActivateSheet(drawing, originalSheetName);
             }
 
-            return deletedCount;
+            return DeleteCollected(model, balloons, "DeleteAllBalloons(sheets)");
         }
 
         // Generic layer-cleanup helper: removes every note-type annotation
@@ -842,7 +1206,7 @@ namespace BINSPECTION.Core
 
                         if (annotation == null)
                         {
-                            System.Diagnostics.Debug.WriteLine(
+                            BinspectionLog.Warn("BalloonManager",
                                 "RemoveNotesOnLayer: layer item was not an IAnnotation - actual type " +
                                 (item?.GetType().FullName ?? "null"));
 
@@ -867,7 +1231,7 @@ namespace BINSPECTION.Core
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(
+                        BinspectionLog.Warn("BalloonManager",
                             $"RemoveNotesOnLayer item Error: {ex}");
                     }
                 }
@@ -879,7 +1243,7 @@ namespace BINSPECTION.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
+                BinspectionLog.Warn("BalloonManager",
                     $"RemoveNotesOnLayer Error: {ex}");
 
                 return false;
@@ -901,9 +1265,22 @@ namespace BINSPECTION.Core
             if (model == null || note == null)
                 return null;
 
-            return PersistentReferenceHelper.GetPersistentId(
-                model,
-                note.GetAnnotation());
+            try
+            {
+                string id = PersistentReferenceHelper.GetPersistentId(
+                    model,
+                    note.GetAnnotation());
+
+                if (id == null)
+                    BinspectionLog.Warn("GetBalloonPersistId", "no persistent id could be generated for a balloon note");
+
+                return id;
+            }
+            catch (Exception ex)
+            {
+                BinspectionLog.Error("GetBalloonPersistId", ex);
+                return null;
+            }
         }
 
         // Removes balloons directly by their own stored persistent
@@ -958,13 +1335,13 @@ namespace BINSPECTION.Core
                         {
                             if ((state & swPersistReferencedObjectStates_e.swPersistReferencedObject_Deleted) != 0)
                             {
-                                System.Diagnostics.Debug.WriteLine(
+                                BinspectionLog.Warn("BalloonManager",
                                     "RemoveBalloonsByPersistId: already gone (Deleted) - " +
                                     DescribeId(base64Id));
                             }
                             else
                             {
-                                System.Diagnostics.Debug.WriteLine(
+                                BinspectionLog.Warn("BalloonManager",
                                     "RemoveBalloonsByPersistId: could not resolve (" + state + ") - " +
                                     DescribeId(base64Id));
                             }
@@ -977,7 +1354,7 @@ namespace BINSPECTION.Core
 
                         if (annotation == null)
                         {
-                            System.Diagnostics.Debug.WriteLine(
+                            BinspectionLog.Warn("BalloonManager",
                                 "RemoveBalloonsByPersistId: resolved object was not an IAnnotation - actual type " +
                                 resolved.GetType().FullName + " - " + DescribeId(base64Id));
 
@@ -992,7 +1369,7 @@ namespace BINSPECTION.Core
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(
+                        BinspectionLog.Warn("BalloonManager",
                             $"RemoveBalloonsByPersistId item Error: {ex}");
                     }
                 }
@@ -1005,7 +1382,7 @@ namespace BINSPECTION.Core
 
                 if (!deleted)
                 {
-                    System.Diagnostics.Debug.WriteLine(
+                    BinspectionLog.Warn("BalloonManager",
                         "RemoveBalloonsByPersistId: DeleteSelection2 returned false with " +
                         selectedCount + " item(s) selected.");
                 }
@@ -1014,7 +1391,7 @@ namespace BINSPECTION.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
+                BinspectionLog.Warn("BalloonManager",
                     $"RemoveBalloonsByPersistId Error: {ex}");
 
                 return 0;

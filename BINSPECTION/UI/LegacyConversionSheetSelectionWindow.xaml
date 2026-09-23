@@ -1,8 +1,8 @@
-<Window x:Class="BINSPECTION.UI.RefreshBalloonsSheetSelectionWindow"
+<Window x:Class="BINSPECTION.UI.LegacyConversionSheetSelectionWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="RootWindow"
-        Title="Refresh Balloons"
+        Title="Legacy Conversion"
         Height="520" Width="460"
         MinHeight="380" MinWidth="400"
         WindowStartupLocation="CenterScreen"
@@ -25,7 +25,7 @@
         <TextBlock Grid.Row="0"
                    Margin="0,0,0,8"
                    TextWrapping="Wrap"
-                   Text="Check which sheets to refresh. Every balloon on a checked sheet is removed and redrawn against current geometry; sheets left unchecked are not touched. Saved balloon data is not changed." />
+                   Text="Check which sheets' balloons are eligible for legacy conversion this run. A balloon on an unchecked sheet is left alone - it can be converted in a later run. A characteristic whose sheet isn't known is always included, since it can't be excluded safely." />
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
             <Button Content="Select All" Width="120" Margin="0,0,8,0" Click="SelectAll_Click" />
@@ -44,7 +44,7 @@
                 <!-- Plain CheckBox in a template cell, not
                      DataGridCheckBoxColumn - see CreateBalloonsSheetSelectionWindow
                      for why (single-click-doesn't-commit bug). -->
-                <DataGridTemplateColumn Header="Refresh" Width="90">
+                <DataGridTemplateColumn Header="Convert" Width="90">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -60,7 +60,7 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,10,0,0">
-            <Button Content="Refresh" Width="110" Margin="0,0,8,0" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Refresh_Click" />
+            <Button Content="Continue" Width="110" Margin="0,0,8,0" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Continue_Click" />
             <Button Content="Cancel" Width="110" IsCancel="True" Click="Cancel_Click" />
         </StackPanel>
     </Grid>

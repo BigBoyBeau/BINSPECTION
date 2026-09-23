@@ -3,11 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="RootWindow"
         Title="Create Balloons"
-        Height="480" Width="480"
-        MinHeight="340" MinWidth="420"
+        Height="600" Width="640"
+        MinHeight="440" MinWidth="560"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize">
-    <Grid Margin="10">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/BINSPECTION;component/UI/Theme/DarkTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="10" Background="{StaticResource BgBase}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,22 +28,22 @@
                    TextWrapping="Wrap"
                    Text="Check which sheets to populate with balloons - any unchecked sheet is left completely alone, even if it has dimensions or notes on it. Numbering continues in order across every checked sheet. Optionally reserve a number range for a sheet (or the same range for several sheets) - once that range is filled, numbering continues from the next highest unused number in the whole drawing." />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,4">
-            <Button Content="Select All" Width="80" Margin="0,0,4,0" Click="SelectAll_Click" />
-            <Button Content="Select None" Width="80" Click="SelectNone_Click" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="Select All" Width="120" Margin="0,0,8,0" Click="SelectAll_Click" />
+            <Button Content="Select None" Width="120" Click="SelectNone_Click" />
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
-            <TextBlock Text="From sheet" VerticalAlignment="Center" Margin="0,0,4,0" />
-            <ComboBox x:Name="StartSheetCombo" Width="80" Margin="0,0,10,0" />
-            <TextBlock Text="to sheet" VerticalAlignment="Center" Margin="0,0,4,0" />
-            <ComboBox x:Name="EndSheetCombo" Width="80" Margin="0,0,10,0" />
-            <TextBlock Text="Range" VerticalAlignment="Center" Margin="0,0,4,0" />
-            <TextBox x:Name="SpanRangeStartBox" Width="55" Margin="0,0,2,0" />
-            <TextBlock Text="-" VerticalAlignment="Center" Margin="0,0,2,0" />
-            <TextBox x:Name="SpanRangeEndBox" Width="55" Margin="0,0,10,0" />
-            <Button Content="Apply" Width="60" Click="ApplyRange_Click" />
-        </StackPanel>
+        <WrapPanel Grid.Row="2" Margin="0,0,0,12">
+            <TextBlock Text="From sheet" VerticalAlignment="Center" Margin="0,0,6,6" />
+            <ComboBox x:Name="StartSheetCombo" Width="110" Margin="0,0,12,6" />
+            <TextBlock Text="to sheet" VerticalAlignment="Center" Margin="0,0,6,6" />
+            <ComboBox x:Name="EndSheetCombo" Width="110" Margin="0,0,12,6" />
+            <TextBlock Text="Range" VerticalAlignment="Center" Margin="0,0,6,6" />
+            <TextBox x:Name="SpanRangeStartBox" Width="70" Margin="0,0,4,6" />
+            <TextBlock Text="-" VerticalAlignment="Center" Margin="0,0,4,6" />
+            <TextBox x:Name="SpanRangeEndBox" Width="70" Margin="0,0,12,6" />
+            <Button Content="Apply" Width="90" Margin="0,0,0,6" Click="ApplyRange_Click" />
+        </WrapPanel>
 
         <DataGrid Grid.Row="3"
                   x:Name="SheetsGrid"
@@ -47,7 +54,23 @@
                   CanUserSortColumns="False"
                   HeadersVisibility="Column">
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="Populate" Binding="{Binding IsChecked}" Width="70" />
+                <!-- A real CheckBox in a template cell, not
+                     DataGridCheckBoxColumn - the latter's generated display
+                     checkbox is hit-test-disabled until the cell becomes
+                     "current," which made a single click sometimes just
+                     select the row instead of toggling the box (you'd see
+                     it visually check but the click never actually
+                     committed a value change SheetRow.IsChecked reflected).
+                     A plain CheckBox is always live, so one click always
+                     toggles and commits immediately. -->
+                <DataGridTemplateColumn Header="Populate" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Sheet" Binding="{Binding Name}" IsReadOnly="True" Width="*" />
                 <DataGridTextColumn Header="Range Start" Binding="{Binding RangeStart}" Width="90" />
                 <DataGridTextColumn Header="Range End" Binding="{Binding RangeEnd}" Width="90" />
@@ -58,8 +81,8 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,10,0,0">
-            <Button Content="Create" Width="80" Margin="0,0,8,0" IsDefault="True" Click="Create_Click" />
-            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="Create" Width="110" Margin="0,0,8,0" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Create_Click" />
+            <Button Content="Cancel" Width="110" IsCancel="True" Click="Cancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

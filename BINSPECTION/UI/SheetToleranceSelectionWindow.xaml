@@ -3,11 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="RootWindow"
         Title="Sheet Tolerance Selection"
-        Height="700" Width="820"
-        MinHeight="560" MinWidth="700"
+        Height="820" Width="960"
+        MinHeight="640" MinWidth="820"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize">
-    <Grid Margin="10">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/BINSPECTION;component/UI/Theme/DarkTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="10" Background="{StaticResource BgBase}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -59,25 +66,25 @@
 
                 <ListBox x:Name="ToleranceSetsList"
                          DockPanel.Dock="Top"
-                         Height="90"
-                         Margin="0,0,0,4"
+                         Height="110"
+                         Margin="0,0,0,8"
                          ItemsSource="{Binding ToleranceSets, ElementName=RootWindow}"
                          DisplayMemberPath="Name"
                          SelectedItem="{Binding SelectedToleranceSet, ElementName=RootWindow, Mode=TwoWay}" />
 
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
-                    <Button Content="Add Set" Width="70" Margin="0,0,4,0" Click="AddSet_Click" />
-                    <Button Content="Remove Set" Width="80" Margin="0,0,8,0" Click="RemoveSet_Click" />
-                    <TextBox x:Name="SetNameTextBox" Width="110" Margin="0,0,4,0" />
-                    <Button Content="Rename" Width="60" Click="RenameSet_Click" />
-                </StackPanel>
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Button Content="Add Set" Width="100" Margin="0,0,6,6" Click="AddSet_Click" />
+                    <Button Content="Remove Set" Width="110" Margin="0,0,10,6" Click="RemoveSet_Click" />
+                    <TextBox x:Name="SetNameTextBox" Width="140" Margin="0,0,6,6" />
+                    <Button Content="Rename" Width="90" Margin="0,0,0,6" Click="RenameSet_Click" />
+                </WrapPanel>
 
-                <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Text="Tolerances for selected set" Margin="0,4,0,4" />
+                <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Text="Tolerances for selected set" Margin="0,4,0,6" />
 
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,4,0,0">
-                    <Button Content="Add Row" Width="70" Margin="0,0,4,0" Click="AddEntry_Click" />
-                    <Button Content="Remove Row" Width="80" Click="RemoveEntry_Click" />
-                </StackPanel>
+                <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <Button Content="Add Row" Width="100" Margin="0,0,6,6" Click="AddEntry_Click" />
+                    <Button Content="Remove Row" Width="110" Margin="0,0,0,6" Click="RemoveEntry_Click" />
+                </WrapPanel>
 
                 <DataGrid x:Name="EntriesGrid"
                           ItemsSource="{Binding SelectedEntries, ElementName=RootWindow}"
@@ -87,7 +94,18 @@
                           HeadersVisibility="Column">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Decimal Places" Binding="{Binding DecimalPlaces}" Width="95" />
-                        <DataGridCheckBoxColumn Header="Angular" Binding="{Binding IsAngular}" Width="60" />
+                        <!-- Plain CheckBox in a template cell, not
+                             DataGridCheckBoxColumn - see
+                             CreateBalloonsSheetSelectionWindow for why
+                             (single-click-doesn't-commit bug). -->
+                        <DataGridTemplateColumn Header="Angular" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsAngular, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Tolerance" Binding="{Binding Value, StringFormat=0.#####}" Width="80" />
                         <DataGridTextColumn Header="Preview" Binding="{Binding Label}" IsReadOnly="True" Width="*" />
                     </DataGrid.Columns>
@@ -153,8 +171,8 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,10,0,0">
-            <Button Content="OK" Width="80" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click" />
-            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="OK" Width="110" Margin="0,0,8,0" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Ok_Click" />
+            <Button Content="Cancel" Width="110" IsCancel="True" Click="Cancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

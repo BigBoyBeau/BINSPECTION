@@ -19,12 +19,14 @@ namespace BINSPECTION.CommandManager
 
         private ICommandManager _cmdMgr;
 
-        // Balloon Manager runs modeless (Show, not ShowDialog) so the user
-        // can select dimensions/balloons in the graphics area while it's
-        // open, the way SW Inspection's panel works. Tracked here so a
-        // second invocation of the command just brings the existing window
-        // forward instead of opening a duplicate.
-        private BINSPECTION.UI.BalloonManagerWindow _balloonManagerWindow;
+        // Set once from BInspectionAddIn.ConnectToSW, right after the Task
+        // Pane is created - OnOpenBalloonManager pushes the active
+        // drawing's context into the host control and brings the docked
+        // panel to front, rather than constructing a floating
+        // BalloonManagerWindow (still in the repo, just no longer wired up
+        // here - see UI/TaskPane/BalloonManagerPanel).
+        private TaskpaneView _taskpaneView;
+        private BINSPECTION.UI.TaskPane.TaskPaneHostControl _taskPaneHostControl;
 
         public CommandManagerHandler(
             ISldWorks swApp,
@@ -32,6 +34,38 @@ namespace BINSPECTION.CommandManager
         {
             _swApp = swApp;
             _addinId = addinId;
+        }
+
+        public void SetTaskPane(TaskpaneView taskpaneView, BINSPECTION.UI.TaskPane.TaskPaneHostControl hostControl)
+        {
+            _taskpaneView = taskpaneView;
+            _taskPaneHostControl = hostControl;
+
+            // Routes the panel's "submenu" nav buttons to the exact same
+            // On* method the matching ribbon button already calls - no
+            // logic duplicated between the ribbon and the panel. Create
+            // Balloons/Remove Balloons/Delete All Balloons all change what
+            // the grid displays (new balloons, notes removed, or everything
+            // wiped), so each refreshes Balloon Manager afterward; Sheet
+            // Tolerances/Save/Restore Position/Generate Report don't change
+            // anything the grid shows, so they don't need that extra
+            // refresh. Delete All Balloons already confirms with the user
+            // itself (OnDeleteAllBalloons) - no separate confirmation here.
+            if (hostControl != null)
+            {
+                hostControl.OpenSheetTolerancesRequested += (s, e) => OnSheetToleranceSelection();
+                hostControl.CreateBalloonsRequested += (s, e) => { OnCreateBalloons(); OnOpenBalloonManager(); };
+                hostControl.RemoveBalloonsRequested += (s, e) => { OnRemoveBalloons(); OnOpenBalloonManager(); };
+                hostControl.DeleteAllBalloonsRequested += (s, e) => { OnDeleteAllBalloons(); OnOpenBalloonManager(); };
+                hostControl.SavePositionRequested += (s, e) => OnSavePosition();
+                hostControl.RestorePositionRequested += (s, e) => OnRestorePosition();
+                hostControl.GenerateReportRequested += (s, e) => OnGenerateReport();
+
+                // Reset just re-runs the same active-document/fresh-disk-load
+                // flow OnOpenBalloonManager already does on every open - see
+                // BalloonManagerPanel.ResetRequested's remarks.
+                hostControl.ResetRequested += (s, e) => OnOpenBalloonManager();
+            }
         }
 
         public void CreateCommandManager()
@@ -262,6 +296,20 @@ namespace BINSPECTION.CommandManager
                 // succeeded without SolidWorks interrupting normal use.
                 System.Diagnostics.Debug.WriteLine(
                     $"BINSPECTION Commands Loaded: {cmd1}, {cmd2}, {cmd3}, {cmd4}, {cmd5}, {cmd6}, {cmd7}, {cmd8}, {cmd9}, {cmd10}");
+
+                // Groups the same 10 commands above into a proper ribbon tab
+                // (Setup / Balloons / Position / Report), separate from the
+                // CommandGroup toolbar/menu created above - the toolbar/menu
+                // still exists (it's what backs the Tools menu entry), this
+                // just additionally lays the buttons out as a tab the way
+                // native SolidWorks tabs (Features, Sketch, ...) do.
+                //
+                // ICommandTabBox has no caption/label property (confirmed
+                // against the SolidWorks API reference), so the boxes below
+                // give visual separation between clusters but not a text
+                // caption under each one the way "3D Sketch"/"Curves" show
+                // under native SolidWorks ribbon groups.
+                CreateCommandTab(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7, cmd8, cmd9, cmd10);
             }
             catch (Exception ex)
             {
@@ -272,6 +320,98 @@ namespace BINSPECTION.CommandManager
             }
         }
 
+        // Builds the "BINSPECTION" ribbon tab for drawing documents, laid
+        // out as: Setup (Sheet Tolerances) | Balloons (Create/Manager/
+        // Restore/Refresh/Remove) | Delete All (its own trailing box, icon
+        // only - the closest this API allows to visually de-emphasizing a
+        // destructive/debugging command, since per-button colors/borders
+        // aren't exposed) | Position (Save/Restore) | Report (Generate).
+        //
+        // Guards against GetCommandTab already returning a tab (add-in
+        // reloaded without SolidWorks restarting) by clearing its existing
+        // boxes first, rather than piling duplicate boxes on top of it.
+        private void CreateCommandTab(
+            int cmdCreateBalloons,
+            int cmdGenerateReport,
+            int cmdRestoreBalloons,
+            int cmdBalloonManager,
+            int cmdSheetTolerances,
+            int cmdDeleteAllBalloons,
+            int cmdRemoveBalloons,
+            int cmdRefreshBalloons,
+            int cmdSavePosition,
+            int cmdRestorePosition)
+        {
+            const string tabName = "BINSPECTION";
+
+            CommandTab commandTab =
+                _cmdMgr.GetCommandTab((int)swDocumentTypes_e.swDocDRAWING, tabName);
+
+            if (commandTab == null)
+            {
+                commandTab =
+                    _cmdMgr.AddCommandTab((int)swDocumentTypes_e.swDocDRAWING, tabName);
+            }
+            else
+            {
+                object[] existingBoxes = commandTab.CommandTabBoxes() as object[];
+
+                if (existingBoxes != null)
+                {
+                    foreach (object boxObj in existingBoxes)
+                    {
+                        CommandTabBox existingBox = boxObj as CommandTabBox;
+
+                        if (existingBox != null)
+                            commandTab.RemoveCommandTabBox(existingBox);
+                    }
+                }
+            }
+
+            if (commandTab == null)
+                return;
+
+            AddCommandTabGroup(
+                commandTab,
+                new[] { cmdSheetTolerances },
+                swCommandTabButtonTextDisplay_e.swCommandTabButton_TextBelow);
+
+            AddCommandTabGroup(
+                commandTab,
+                new[] { cmdCreateBalloons, cmdBalloonManager, cmdRestoreBalloons, cmdRefreshBalloons, cmdRemoveBalloons },
+                swCommandTabButtonTextDisplay_e.swCommandTabButton_TextBelow);
+
+            AddCommandTabGroup(
+                commandTab,
+                new[] { cmdDeleteAllBalloons },
+                swCommandTabButtonTextDisplay_e.swCommandTabButton_NoText);
+
+            AddCommandTabGroup(
+                commandTab,
+                new[] { cmdSavePosition, cmdRestorePosition },
+                swCommandTabButtonTextDisplay_e.swCommandTabButton_TextBelow);
+
+            AddCommandTabGroup(
+                commandTab,
+                new[] { cmdGenerateReport },
+                swCommandTabButtonTextDisplay_e.swCommandTabButton_TextBelow);
+        }
+
+        private static void AddCommandTabGroup(
+            CommandTab tab,
+            int[] commandIds,
+            swCommandTabButtonTextDisplay_e textDisplayStyle)
+        {
+            CommandTabBox box = tab.AddCommandTabBox();
+
+            int[] textDisplayStyles = new int[commandIds.Length];
+
+            for (int i = 0; i < commandIds.Length; i++)
+                textDisplayStyles[i] = (int)textDisplayStyle;
+
+            box.AddCommands(commandIds, textDisplayStyles);
+        }
+
         public void RemoveCommandManager()
         {
             try
@@ -279,6 +419,12 @@ namespace BINSPECTION.CommandManager
                 if (_cmdMgr != null)
                 {
                     _cmdMgr.RemoveCommandGroup(1);
+
+                    CommandTab commandTab =
+                        _cmdMgr.GetCommandTab((int)swDocumentTypes_e.swDocDRAWING, "BINSPECTION");
+
+                    if (commandTab != null)
+                        _cmdMgr.RemoveCommandTab(commandTab);
                 }
             }
             catch
@@ -518,11 +664,41 @@ namespace BINSPECTION.CommandManager
                 List<DrawingSheetHelper.ViewOnSheet> viewsBySheet =
                     DrawingSheetHelper.GetAllViewsBySheet(drawing, sheetPicker.SelectedSheets);
 
+                // A SEPARATE full-drawing (not sheet-picker-scoped) cache,
+                // computed once here and handed to every CreateBalloon call
+                // in the placement loop below for its own duplicate-number
+                // check (BalloonManager.FindExistingBalloon). That check
+                // has to see the WHOLE drawing, not just the sheets checked
+                // in the picker above - a duplicate could already exist on
+                // a sheet the user didn't select this run - so it can't
+                // reuse the scoped `viewsBySheet` above. Before this, that
+                // duplicate check had no cache at all and re-walked (i.e.
+                // re-activated) every sheet in the drawing once per balloon
+                // CREATED, not once per run - on a document with many
+                // characteristics that meant cycling through every sheet
+                // dozens of times over. One extra full pass here, shared by
+                // every balloon this run creates, replaces all of that.
+                List<DrawingSheetHelper.ViewOnSheet> duplicateCheckViewsBySheet =
+                    DrawingSheetHelper.GetAllViewsBySheet(drawing);
+
                 DimensionScanner scanner =
                     new DimensionScanner();
 
                 // TEMPORARY - see Core/ReferenceDimensionDiagnostics.cs.
                 List<string> referenceDiagnostics = new List<string>();
+
+                // TEMPORARY - timing breakdown for a reported "large Create
+                // Balloons run looks like it hangs/cycles" issue. A prior
+                // pass fixed two confirmed sources of quadratic cost
+                // (redundant sheet re-activation, a per-balloon full-
+                // annotation duplicate-number walk), but the report
+                // persisted, so this measures each phase directly instead
+                // of guessing further - see the "Timing" section folded
+                // into the final result message below. Remove once the
+                // actual slow phase has been identified and fixed for
+                // real.
+                System.Diagnostics.Stopwatch scanStopwatch =
+                    System.Diagnostics.Stopwatch.StartNew();
 
                 List<DimensionHit> dimensions =
                     scanner.GetAllDimensions(
@@ -530,7 +706,8 @@ namespace BINSPECTION.CommandManager
                         (dim, included) =>
                             referenceDiagnostics.Add(
                                 ReferenceDimensionDiagnostics.Describe(dim, included)),
-                        viewsBySheet);
+                        viewsBySheet,
+                        model);
 
                 AnnotationScanner annotationScanner =
                     new AnnotationScanner();
@@ -543,6 +720,8 @@ namespace BINSPECTION.CommandManager
 
                 List<NoteHit> eligibleNotes =
                     annotationScanner.GetEligibleNotes(drawing, viewsBySheet);
+
+                long scanElapsedMs = scanStopwatch.ElapsedMilliseconds;
 
                 // Diagnostic only: how many of each hit type the scan
                 // attributes to each sheet (via the same Hit.SheetName the
@@ -582,6 +761,28 @@ namespace BINSPECTION.CommandManager
 
                 BalloonManager balloonManager =
                     new BalloonManager();
+
+                // One-time index of every balloon-shaped note already on
+                // the drawing, keyed by its display number - shared by
+                // every CreateBalloon call below so each new balloon's
+                // duplicate-number check is an O(1) lookup instead of a
+                // fresh walk of every annotation on every sheet PER
+                // BALLOON. Without this, that per-call walk (not just the
+                // sheet-activation cost duplicateCheckViewsBySheet above
+                // already fixed) grew with the square of how many balloons
+                // this run placed - the actual reason a large Create
+                // Balloons run could look like it had gone into a stuck,
+                // cycling loop that never seemed to finish. CreateBalloon
+                // keeps this in sync as it creates each balloon, so a
+                // duplicate against a note created earlier in this SAME run
+                // is still caught correctly.
+                System.Diagnostics.Stopwatch indexStopwatch =
+                    System.Diagnostics.Stopwatch.StartNew();
+
+                Dictionary<string, Note> existingBalloonIndex =
+                    balloonManager.BuildExistingBalloonIndex(drawing, duplicateCheckViewsBySheet);
+
+                long indexElapsedMs = indexStopwatch.ElapsedMilliseconds;
 
                 int balloonsCreated = 0;
                 int failedItems = 0;
@@ -632,6 +833,9 @@ namespace BINSPECTION.CommandManager
                 // straight through regardless: CharacteristicManager.
                 // GetNextNumber/allKnownNumbers are shared across every
                 // sheet processed in this run.
+                System.Diagnostics.Stopwatch placementStopwatch =
+                    System.Diagnostics.Stopwatch.StartNew();
+
                 foreach (string currentSheet in selectedSheets)
                 {
                     DrawingSheetHelper.ActivateSheet(drawing, currentSheet);
@@ -776,7 +980,9 @@ namespace BINSPECTION.CommandManager
                                     dim,
                                     firstDisplayNumber,
                                     dimSheetName,
-                                    dimensionHit.View);
+                                    dimensionHit.View,
+                                    duplicateCheckViewsBySheet,
+                                    existingBalloonIndex);
 
                             if (multiValueBalloon == null)
                             {
@@ -829,7 +1035,9 @@ namespace BINSPECTION.CommandManager
                                 dim,
                                 nextNumber,
                                 dimSheetName,
-                                dimensionHit.View);
+                                dimensionHit.View,
+                                duplicateCheckViewsBySheet,
+                                existingBalloonIndex);
 
                         if (note == null)
                         {
@@ -949,7 +1157,9 @@ namespace BINSPECTION.CommandManager
                                 gtol,
                                 nextNumber.ToString(),
                                 gtolSheetName,
-                                gtolHit.View);
+                                gtolHit.View,
+                                duplicateCheckViewsBySheet,
+                                existingBalloonIndex);
 
                         if (note == null)
                         {
@@ -1056,7 +1266,9 @@ namespace BINSPECTION.CommandManager
                                 surfaceFinish,
                                 nextNumber.ToString(),
                                 surfaceFinishSheetName,
-                                surfaceFinishHit.View);
+                                surfaceFinishHit.View,
+                                duplicateCheckViewsBySheet,
+                                existingBalloonIndex);
 
                         if (note == null)
                         {
@@ -1131,7 +1343,9 @@ namespace BINSPECTION.CommandManager
                                     sourceNote,
                                     nextNumber.ToString(),
                                     noteSheetName,
-                                    noteHit.View);
+                                    noteHit.View,
+                                    duplicateCheckViewsBySheet,
+                                    existingBalloonIndex);
 
                             if (note == null)
                             {
@@ -1187,7 +1401,9 @@ namespace BINSPECTION.CommandManager
                                     sourceNote,
                                     firstDisplayNumber,
                                     noteSheetName,
-                                    noteHit.View);
+                                    noteHit.View,
+                                    duplicateCheckViewsBySheet,
+                                    existingBalloonIndex);
 
                             if (note == null)
                             {
@@ -1237,6 +1453,8 @@ namespace BINSPECTION.CommandManager
                         }
                     }
                 }
+
+                long placementElapsedMs = placementStopwatch.ElapsedMilliseconds;
 
                 if (persistenceAvailable)
                 {
@@ -1356,6 +1574,20 @@ namespace BINSPECTION.CommandManager
                     }
                 }
 
+                // TEMPORARY - see scanStopwatch's remarks above. Only shown
+                // once a run takes long enough to matter, so this doesn't
+                // clutter the normal-sized-run result message.
+                long totalElapsedMs = scanElapsedMs + indexElapsedMs + placementElapsedMs;
+
+                if (totalElapsedMs > 3000)
+                {
+                    resultMessage +=
+                        "\n\nTiming (ms) - scan: " + scanElapsedMs +
+                        ", duplicate index: " + indexElapsedMs +
+                        ", placement: " + placementElapsedMs +
+                        ", total: " + totalElapsedMs;
+                }
+
                 _swApp.SendMsgToUser2(
                     resultMessage,
                     failedItems > 0
@@ -1433,7 +1665,7 @@ namespace BINSPECTION.CommandManager
                 // accumulating one per run.
                 string reportPath =
                     Path.ChangeExtension(model.GetPathName(), null) +
-                    " - Inspection Report.xlsx";
+                    " -  Inspection Report.xlsx";
 
                 bool success =
                     ReportGenerator.BuildInspectionReport(
@@ -1442,10 +1674,9 @@ namespace BINSPECTION.CommandManager
 
                 if (success)
                 {
-                    _swApp.SendMsgToUser2(
-                        "Inspection report saved to:\n" + reportPath,
-                        (int)swMessageBoxIcon_e.swMbInformation,
-                        (int)swMessageBoxBtn_e.swMbOk);
+                    UI.ToastNotification.ShowSuccess(
+                        "Report Generated",
+                        Path.GetFileName(reportPath));
                 }
                 else
                 {
@@ -1685,9 +1916,13 @@ namespace BINSPECTION.CommandManager
                     return;
                 }
 
-                if (_balloonManagerWindow != null)
+                if (_taskPaneHostControl == null)
                 {
-                    _balloonManagerWindow.Activate();
+                    _swApp.SendMsgToUser2(
+                        "The BINSPECTION Task Pane isn't available - try reloading the add-in.",
+                        (int)swMessageBoxIcon_e.swMbStop,
+                        (int)swMessageBoxBtn_e.swMbOk);
+
                     return;
                 }
 
@@ -1704,26 +1939,21 @@ namespace BINSPECTION.CommandManager
                     return;
                 }
 
+                // Unlike the old modeless BalloonManagerWindow (constructed
+                // fresh, or Activate()d/ReloadFromDisk()'d if already
+                // open), the Task Pane's panel is a singleton created once
+                // in ConnectToSW - every invocation of this command just
+                // pushes the current drawing's context into it and brings
+                // it to front.
                 ProjectData projectData =
                     PersistenceManager.LoadProject(dataFilePath);
 
-                BINSPECTION.UI.BalloonManagerWindow window =
-                    new BINSPECTION.UI.BalloonManagerWindow(model, drawing, dataFilePath, projectData);
+                _taskPaneHostControl.ShowBalloonManager(model, drawing, dataFilePath, projectData);
 
-                window.Closed += (sender, args) =>
-                {
-                    _balloonManagerWindow = null;
+                CharacteristicManager.Clear();
+                CharacteristicManager.LoadFrom(projectData.Characteristics);
 
-                    if (window.DataChanged)
-                    {
-                        CharacteristicManager.Clear();
-                        CharacteristicManager.LoadFrom(projectData.Characteristics);
-                    }
-                };
-
-                _balloonManagerWindow = window;
-
-                window.Show();
+                _taskpaneView?.ShowView();
             }
             catch (Exception ex)
             {
@@ -2147,7 +2377,9 @@ namespace BINSPECTION.CommandManager
 
                 foreach (Characteristic characteristic in persisted)
                 {
-                    if (string.IsNullOrEmpty(characteristic.BalloonPersistId))
+                    // A data-only group member (SharesGroupBalloon) holds its
+                    // group's balloon id, not a balloon of its own.
+                    if (string.IsNullOrEmpty(characteristic.BalloonPersistId) || characteristic.SharesGroupBalloon)
                         continue;
 
                     IAnnotation annotation =
@@ -2189,10 +2421,14 @@ namespace BINSPECTION.CommandManager
                         " balloon(s) could not be found on the drawing and were skipped.";
                 }
 
-                _swApp.SendMsgToUser2(
-                    message,
-                    (int)swMessageBoxIcon_e.swMbInformation,
-                    (int)swMessageBoxBtn_e.swMbOk);
+                // Success and partial-success both proceed without needing
+                // an acknowledgment click - only a hard stop above (no
+                // document, no drawing, never saved) blocks with a native
+                // SendMsgToUser2 modal.
+                if (missingCount > 0)
+                    UI.ToastNotification.ShowWarning("Position Saved", message);
+                else
+                    UI.ToastNotification.ShowSuccess("Position Saved", message);
             }
             catch (Exception ex)
             {
@@ -2256,7 +2492,8 @@ namespace BINSPECTION.CommandManager
 
                 foreach (Characteristic characteristic in persisted)
                 {
-                    if (string.IsNullOrEmpty(characteristic.BalloonPersistId))
+                    // Skipped for the same reason as in Save Position.
+                    if (string.IsNullOrEmpty(characteristic.BalloonPersistId) || characteristic.SharesGroupBalloon)
                         continue;
 
                     if (!characteristic.BalloonPositionX.HasValue ||
@@ -2311,10 +2548,10 @@ namespace BINSPECTION.CommandManager
                     }
                 }
 
-                _swApp.SendMsgToUser2(
-                    message,
-                    (int)swMessageBoxIcon_e.swMbInformation,
-                    (int)swMessageBoxBtn_e.swMbOk);
+                if (restoredCount == 0 || missingCount > 0 || unsavedCount > 0)
+                    UI.ToastNotification.ShowWarning("Position Restored", message);
+                else
+                    UI.ToastNotification.ShowSuccess("Position Restored", message);
             }
             catch (Exception ex)
             {

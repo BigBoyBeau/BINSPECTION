@@ -4,7 +4,7 @@
 
   <Package Name="BINSPECTION"
            Manufacturer="HP Inc."
-           Version="0.0.6.0"
+           Version="0.0.8.0"
            UpgradeCode="F95C951D-BE68-40AB-AB4A-CE7CA7EE8D08"
            Scope="perMachine">
 

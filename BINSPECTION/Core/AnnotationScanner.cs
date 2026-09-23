@@ -131,23 +131,36 @@ namespace BINSPECTION.Core
         {
             foreach (DrawingSheetHelper.ViewOnSheet entry in viewsBySheet ?? DrawingSheetHelper.GetAllViewsBySheet(drawing))
             {
-                Annotation annotation =
-                    (Annotation)entry.View.GetFirstAnnotation3();
-
-                while (annotation != null)
+                // Per-view guard around the chain walk itself (not just the
+                // visit callback): a view deleted since viewsBySheet was
+                // built, or a GetNext3 that throws mid-chain, used to escape
+                // this method entirely and abort whatever caller was
+                // scanning - including CreateBalloon's duplicate check.
+                try
                 {
-                    try
-                    {
-                        visit(annotation, entry.View, entry.SheetName);
-                    }
-                    catch
-                    {
-                        // One unreadable annotation shouldn't stop the whole
-                        // scan - mirrors BalloonManager.FindExistingBalloon.
-                    }
+                    Annotation annotation =
+                        (Annotation)entry.View.GetFirstAnnotation3();
 
-                    annotation =
-                        annotation.GetNext3();
+                    while (annotation != null)
+                    {
+                        try
+                        {
+                            visit(annotation, entry.View, entry.SheetName);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            // One unreadable annotation shouldn't stop the
+                            // whole scan.
+                            BinspectionLog.Error("AnnotationScanner.WalkAllAnnotations: visiting annotation on sheet '" + entry.SheetName + "'", ex);
+                        }
+
+                        annotation =
+                            annotation.GetNext3();
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    BinspectionLog.Error("AnnotationScanner.WalkAllAnnotations: walking a view on sheet '" + entry.SheetName + "'", ex);
                 }
             }
         }

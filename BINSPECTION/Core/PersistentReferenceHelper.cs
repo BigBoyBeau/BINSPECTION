@@ -44,8 +44,7 @@ namespace BINSPECTION.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"PersistentReferenceHelper.GetPersistentId Error: {ex}");
+                BinspectionLog.Error("PersistentReferenceHelper.GetPersistentId", ex);
 
                 return null;
             }
@@ -88,8 +87,7 @@ namespace BINSPECTION.Core
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"PersistentReferenceHelper.ResolvePersistentId Error: {ex}");
+                BinspectionLog.Error("PersistentReferenceHelper.ResolvePersistentId", ex);
 
                 return null;
             }

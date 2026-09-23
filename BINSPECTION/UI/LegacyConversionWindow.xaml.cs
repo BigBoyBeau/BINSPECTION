@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -31,11 +33,39 @@ namespace BINSPECTION.UI
         public class LegacyRow
         {
             public LegacyBalloonRow Legacy { get; set; }
-            public string LegacyNumber { get; set; }
+            public string LegacyBalloonNumber { get; set; }
+
+            // "(4)", etc. - the sheet-within-operation number (LegacyBalloonRow.
+            // OperationSheetNumber), NOT the operation label - changed
+            // 2026-09-21 (explicit user request: "instead of having OP as
+            // the column, use the Sheet Number (1), (2), etc") since that's
+            // what actually scopes matching now (see LegacyNumberMatcher's
+            // page-key gate) - the operation label alone doesn't distinguish
+            // rows the way the sheet number does. Blank when this
+            // spreadsheet's ID column has no combined operation+item shape.
+            public string SheetNumber { get; set; }
+
             public string Nominal { get; set; }
+
+            // The MATCHED live characteristic's own nominal value, straight
+            // off the SolidWorks dimension - added 2026-09-21 (explicit user
+            // request: "i need to see what the nominal value is for the
+            // actual dimension pulled") so the legacy spreadsheet's nominal
+            // and the live drawing's nominal can be compared side by side
+            // instead of only trusting the Score/Why columns. "-" when
+            // nothing matched at all (no candidate to read a nominal from).
+            public string MatchedNominal { get; set; }
+
             public string Method { get; set; }
             public string Class { get; set; }
             public string MatchesBalloon { get; set; }
+
+            // The top candidate's score, e.g. "94%" - "-" when nothing
+            // scored within LegacyNumberMatcher.NominalAdmissionBand at
+            // all. See LegacyNumberMatcher.ScoreCandidate for how this is
+            // computed.
+            public string Score { get; set; }
+
             public string Reason { get; set; }
             public Characteristic Default { get; set; }
             public string Assign { get; set; } = "";
@@ -45,11 +75,62 @@ namespace BINSPECTION.UI
         private readonly string _dataFilePath;
         private readonly ProjectData _projectData;
 
+        // Sheets BalloonManagerWindow's LegacyConversionSheetSelectionWindow
+        // picker gate confirmed before this window ever opened. Null means
+        // no restriction (every characteristic eligible) - kept as a
+        // fallback for robustness, not a code path this window's own
+        // caller actually takes.
+        private readonly HashSet<string> _selectedSheets;
+
         private Dictionary<string, Characteristic> _eligibleByDisplayNumber;
+
+        // The full, unfiltered set of rows the last spreadsheet load
+        // produced - Operation/SelectedOperation filter against this
+        // without needing to re-read the file from disk.
+        private List<LegacyBalloonRow> _loadedLegacyRows;
 
         public ObservableCollection<LegacyRow> Rows { get; } = new ObservableCollection<LegacyRow>();
 
-        public LegacyConversionWindow(ModelDoc2 model, string dataFilePath, ProjectData projectData)
+        // TEMPORARY DISABLED (2026-09-21, explicit user request - "the
+        // operation selection in the legacy conversion can be commented
+        // out, it is causing an issue where no balloons are being
+        // matched, for now leave it out") - the selectable Operation
+        // filter added earlier the same day. Commented out, not deleted -
+        // the XAML ComboBox bound to these is also commented out (see
+        // LegacyConversionWindow.xaml), and RunMatch() below no longer
+        // filters by operation at all (every loaded row is considered,
+        // same as before this feature existed). Root cause of the "no
+        // balloons matched" symptom not yet confirmed - suspect is the
+        // ComboBox's SelectedItem getting reset to null by WPF when
+        // Operations.Clear() runs (before the re-populate loop finishes),
+        // which would flow back through this TwoWay binding and could
+        // leave SelectedOperation in an unexpected state independent of
+        // the _selectedOperation backing field LoadSpreadsheet_Click sets
+        // directly. Restore by un-commenting this block, the matching
+        // filter block in RunMatch(), and the ComboBox in the XAML.
+        /*
+        public ObservableCollection<string> Operations { get; } = new ObservableCollection<string>();
+
+        private const string AllOperationsLabel = "(All)";
+
+        private string _selectedOperation = AllOperationsLabel;
+
+        public string SelectedOperation
+        {
+            get => _selectedOperation;
+            set
+            {
+                _selectedOperation = value;
+                RunMatch();
+            }
+        }
+        */
+
+        public LegacyConversionWindow(
+            ModelDoc2 model,
+            string dataFilePath,
+            ProjectData projectData,
+            List<string> selectedSheets = null)
         {
             InitializeComponent();
             WindowSizing.FitToScreen(this);
@@ -58,7 +139,29 @@ namespace BINSPECTION.UI
             _model = model;
             _dataFilePath = dataFilePath;
             _projectData = projectData;
+
+            _selectedSheets =
+                selectedSheets != null
+                    ? new HashSet<string>(selectedSheets, StringComparer.OrdinalIgnoreCase)
+                    : null;
         }
+
+        // True if characteristic is in scope for this Legacy Conversion run -
+        // its own sheet is one the user checked in the picker, OR its sheet
+        // isn't known at all. An unknown SheetName (an older characteristic
+        // that predates SheetName tracking - see Models/Characteristics.cs
+        // remarks - or one of this window's own "new" rows, which never get
+        // one either) can't be safely excluded by a filter that has no idea
+        // which sheet it actually belongs to, so it stays eligible
+        // regardless of what's checked.
+        private bool IsInScope(Characteristic characteristic)
+        {
+            return _selectedSheets == null ||
+                string.IsNullOrEmpty(characteristic.SheetName) ||
+                _selectedSheets.Contains(characteristic.SheetName);
+        }
+
+        private string _loadedSpreadsheetPath;
 
         private void LoadSpreadsheet_Click(object sender, RoutedEventArgs e)
         {
@@ -89,14 +192,71 @@ namespace BINSPECTION.UI
                 return;
             }
 
-            LegacyMatchResult matchResult =
-                LegacyNumberMatcher.Match(_model, _projectData.Characteristics, legacyRows);
+            _loadedLegacyRows = legacyRows;
+            _loadedSpreadsheetPath = dialog.FileName;
 
-            // Every eligible balloon on the drawing is offered to every row,
-            // not narrowed per row - same as the WinForms dialog this
-            // replaces, since any row (including an already-matched one)
-            // can be redirected to any balloon.
-            List<Characteristic> eligibleCandidates = _projectData.Characteristics
+            // TEMPORARY DISABLED - see Operations' remarks above. The
+            // Operation ComboBox population used to happen here.
+
+            RunMatch();
+        }
+
+        // Re-runs the match against _loadedLegacyRows - called once right
+        // after a spreadsheet loads (was also re-called on every OP filter
+        // change - see Operations' remarks above for why that's disabled).
+        private void RunMatch()
+        {
+            if (_loadedLegacyRows == null)
+                return;
+
+            // TEMPORARY DISABLED - see Operations' remarks above. Every
+            // loaded row is used unfiltered for now, same as before the OP
+            // filter feature existed.
+            List<LegacyBalloonRow> legacyRows = _loadedLegacyRows;
+
+            // Scoped to the sheets checked in LegacyConversionSheetSelectionWindow
+            // before this window opened - a characteristic on a sheet the
+            // user didn't check this run is neither auto-matched nor
+            // offered as a manual "Assign" target, so it's left alone
+            // entirely (can still be converted in a later run). See
+            // IsInScope's remarks for why an unknown SheetName is always
+            // included rather than excluded.
+            List<Characteristic> scopedCharacteristics = _projectData.Characteristics
+                .Where(IsInScope)
+                .ToList();
+
+            // TEMPORARY diagnostic (2026-09-21, explicit user request -
+            // "there is a disconnect" between what's expected and what
+            // Legacy Conversion actually matches): captures exactly what
+            // LegacyNumberMatcher considered for every legacy row - every
+            // candidate that resolved (or didn't, and why), every in-band
+            // score, and the nearest out-of-band near-misses - so a wrong-
+            // looking match can be diagnosed by reading a file instead of
+            // attaching a debugger to the live SolidWorks-hosted add-in.
+            // Remove this call (and the WriteMatchDebugLog/OpenDebugLog
+            // methods below) once the disconnect is understood.
+            List<string> debugLog = new List<string> { "=== Legacy Conversion match diagnostic ===" };
+
+            debugLog.Add("Spreadsheet: " + _loadedSpreadsheetPath);
+            debugLog.Add(
+                "Sheets in scope: " +
+                (_selectedSheets == null ? "(all - no restriction)" : string.Join(", ", _selectedSheets)));
+            debugLog.Add("Operation filter: disabled (all " + legacyRows.Count + " legacy row(s) in scope)");
+            debugLog.Add(string.Empty);
+
+            LegacyMatchResult matchResult =
+                LegacyNumberMatcher.Match(_model, scopedCharacteristics, legacyRows, debugLog);
+
+            string debugLogPath = WriteMatchDebugLog(debugLog);
+
+            OpenDebugLog(debugLogPath);
+
+            // Every eligible balloon on the drawing (within this run's sheet
+            // scope) is offered to every row, not narrowed per row - same
+            // as the WinForms dialog this replaces, since any row
+            // (including an already-matched one) can be redirected to any
+            // balloon.
+            List<Characteristic> eligibleCandidates = scopedCharacteristics
                 .Where(c => !c.IsUnnumbered)
                 .ToList();
 
@@ -106,47 +266,129 @@ namespace BINSPECTION.UI
 
             Rows.Clear();
 
-            List<(LegacyBalloonRow Row, string MatchesBalloon, string Reason, Characteristic Default)> allRows =
-                new List<(LegacyBalloonRow, string, string, Characteristic)>();
+            List<(LegacyBalloonRow Row, string MatchesBalloon, string MatchedNominal, string Score, string Reason, Characteristic Default)> allRows =
+                new List<(LegacyBalloonRow, string, string, string, string, Characteristic)>();
 
-            foreach (LegacyMatchEntry entry in matchResult.Matched)
+            // A runner-up candidate this close (in score points) to the
+            // top one is worth calling out explicitly - the top pick is
+            // still shown as the suggestion (every row always gets one, if
+            // any candidate exists at all), but "verify before applying"
+            // in the Reason column is the built-in check the user asked
+            // for on anything that isn't a clear best pick.
+            const double CloseCandidateGapPoints = 8.0;
+
+            foreach (LegacyMatchEntry entry in matchResult.Entries)
             {
+                if (entry.Candidates.Count == 0)
+                {
+                    allRows.Add((
+                        entry.LegacyRow,
+                        "-",
+                        "-",
+                        "-",
+                        "No balloon matched this dimension value",
+                        null));
+
+                    continue;
+                }
+
+                ScoredCandidate best = entry.Candidates[0];
+
+                string reason = best.Reason;
+
+                if (entry.Candidates.Count > 1)
+                {
+                    ScoredCandidate runnerUp = entry.Candidates[1];
+
+                    if (best.Score - runnerUp.Score < CloseCandidateGapPoints)
+                    {
+                        reason +=
+                            " - close to (" + runnerUp.Characteristic.DisplayNumber + ") at " +
+                            runnerUp.Score.ToString("0") + "%, verify before applying";
+                    }
+                }
+
                 allRows.Add((
                     entry.LegacyRow,
-                    "(" + entry.Characteristic.DisplayNumber + ")  " + entry.Characteristic.DimensionName,
-                    "Matched automatically",
-                    entry.Characteristic));
+                    "(" + best.Characteristic.DisplayNumber + ")  " + best.Characteristic.DimensionName,
+                    best.Nominal.ToString("0.####"),
+                    best.Score.ToString("0") + "%",
+                    reason,
+                    best.Characteristic));
             }
 
-            foreach (LegacyAmbiguousEntry entry in matchResult.Ambiguous)
-            {
-                string candidateList = string.Join(", ", entry.Candidates.Select(c => "(" + c.DisplayNumber + ")"));
-
-                allRows.Add((
-                    entry.LegacyRow,
-                    "-",
-                    entry.Candidates.Count + " balloons share this dimension value: " + candidateList,
-                    null));
-            }
-
-            foreach (LegacyBalloonRow row in matchResult.Unmatched)
-            {
-                allRows.Add((row, "-", "No balloon matched this dimension value", null));
-            }
-
-            foreach (var row in allRows.OrderBy(r => r.Row.LegacyNumber, new LegacyNumberComparer()))
+            foreach (var row in allRows.OrderBy(r => r.Row.LegacyBalloonNumber, new LegacyBalloonNumberComparer()))
             {
                 Rows.Add(new LegacyRow
                 {
                     Legacy = row.Row,
-                    LegacyNumber = row.Row.LegacyNumber,
+                    LegacyBalloonNumber = row.Row.LegacyBalloonNumber,
+                    SheetNumber = string.IsNullOrEmpty(row.Row.OperationSheetNumber) ? null : "(" + row.Row.OperationSheetNumber + ")",
                     Nominal = row.Row.RawNominalText ?? row.Row.Nominal.ToString("0.####"),
+                    MatchedNominal = row.MatchedNominal,
                     Method = row.Row.Method,
                     Class = row.Row.Class,
                     MatchesBalloon = row.MatchesBalloon,
+                    Score = row.Score,
                     Reason = row.Reason,
                     Default = row.Default,
                 });
+            }
+        }
+
+        // TEMPORARY diagnostic - see LoadSpreadsheet_Click's remarks.
+        // Written next to the sidecar JSON (same folder the user already
+        // knows to look in) so it's easy to find; falls back to the temp
+        // folder on the rare chance the drawing has no data file path yet.
+        // Overwritten every run rather than appended - only the most
+        // recent load's matching is ever relevant to look at.
+        private string WriteMatchDebugLog(List<string> debugLog)
+        {
+            string directory =
+                !string.IsNullOrEmpty(_dataFilePath) ? Path.GetDirectoryName(_dataFilePath) : null;
+
+            string path = Path.Combine(
+                !string.IsNullOrEmpty(directory) ? directory : Path.GetTempPath(),
+                "LegacyConversionMatchDebug.txt");
+
+            try
+            {
+                File.WriteAllLines(path, debugLog);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    "Matched, but couldn't write the debug log to " + path + ": " + ex.Message,
+                    "Legacy Conversion");
+
+                return null;
+            }
+
+            return path;
+        }
+
+        // TEMPORARY diagnostic - see LoadSpreadsheet_Click's remarks.
+        // Opens with whatever the user's own machine has associated with
+        // .txt (Notepad, normally) - failure here (no path because writing
+        // it failed above, or nothing registered to open .txt) is shown,
+        // not silently swallowed, since the whole point of this file is
+        // for the user to actually read it.
+        private void OpenDebugLog(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    "Wrote the debug log to " + path + " but couldn't open it: " + ex.Message,
+                    "Legacy Conversion");
             }
         }
 
@@ -184,9 +426,9 @@ namespace BINSPECTION.UI
                 string parsedDisplayNumber;
 
                 if (!LegacyRenumberService.TryParseDisplayNumber(
-                    row.LegacyNumber, out parsedNumber, out parsedSubNumber, out parsedDisplayNumber))
+                    row.LegacyBalloonNumber, out parsedNumber, out parsedSubNumber, out parsedDisplayNumber))
                 {
-                    newCharacteristicInvalidFormat.Add(row.LegacyNumber);
+                    newCharacteristicInvalidFormat.Add(row.LegacyBalloonNumber);
                     continue;
                 }
 
@@ -194,11 +436,11 @@ namespace BINSPECTION.UI
                 {
                     Number = nextPlaceholderNumber++,
                     PersistentRefId = null,
-                    DimensionName = "(added from legacy #" + row.LegacyNumber + ")",
+                    DimensionName = "(added from legacy balloon #" + row.LegacyBalloonNumber + ")",
                     IsUnnumbered = false,
                     SubNumber = null,
                     PreGroupNumber = null,
-                    LegacyNumber = row.LegacyNumber,
+                    LegacyBalloonNumber = row.LegacyBalloonNumber,
                     SheetName = null,
                     Method = row.Method,
                     Class = row.Class,
@@ -214,18 +456,31 @@ namespace BINSPECTION.UI
             List<KeyValuePair<Characteristic, string>> requestedLegacyNumbers =
                 new List<KeyValuePair<Characteristic, string>>();
 
+            // Reverse lookup (Characteristic -> the legacy row that matched
+            // it) so LegacyBalloonNumber/Method/Class can be stamped AFTER
+            // BuildPlan runs, from whichever legacy row actually won -
+            // stamping it here, before BuildPlan even sees these requests,
+            // used to mean a characteristic whose match got REJECTED as an
+            // unresolved Collision (see BuildPlan's remarks) still ended up
+            // with a "Legacy Balloon #" on it that had nothing to do with
+            // what actually happened to its real balloon number - confirmed
+            // live 2026-09-21 ("the legacy balloon number is not pulling
+            // the right number"). First-wins is fine for the handful of
+            // characteristics with more than one AGREEING legacy row (the
+            // same OP+item sampled several times - see
+            // [[binspection_legacy_number_matching]]'s dedup note) since
+            // they all carry the same Method/Class/LegacyBalloonNumber
+            // anyway.
+            Dictionary<Characteristic, LegacyBalloonRow> legacyRowByCharacteristic =
+                new Dictionary<Characteristic, LegacyBalloonRow>();
+
             foreach (KeyValuePair<LegacyBalloonRow, Characteristic> assignment in resolvedAssignments)
             {
-                assignment.Value.LegacyNumber = assignment.Key.LegacyNumber;
-
-                if (assignment.Key.Method != null)
-                    assignment.Value.Method = assignment.Key.Method;
-
-                if (assignment.Key.Class != null)
-                    assignment.Value.Class = assignment.Key.Class;
+                if (!legacyRowByCharacteristic.ContainsKey(assignment.Value))
+                    legacyRowByCharacteristic[assignment.Value] = assignment.Key;
 
                 requestedLegacyNumbers.Add(
-                    new KeyValuePair<Characteristic, string>(assignment.Value, assignment.Key.LegacyNumber));
+                    new KeyValuePair<Characteristic, string>(assignment.Value, assignment.Key.LegacyBalloonNumber));
             }
 
             LegacyRenumberService.RenumberPlan renumberPlan =
@@ -233,11 +488,35 @@ namespace BINSPECTION.UI
 
             LegacyRenumberService.Apply(_model, renumberPlan, new BalloonManager());
 
+            void StampFromLegacyRow(Characteristic characteristic)
+            {
+                LegacyBalloonRow legacyRow;
+
+                if (!legacyRowByCharacteristic.TryGetValue(characteristic, out legacyRow))
+                    return;
+
+                characteristic.LegacyBalloonNumber = legacyRow.LegacyBalloonNumber;
+
+                if (legacyRow.Method != null)
+                    characteristic.Method = legacyRow.Method;
+
+                if (legacyRow.Class != null)
+                    characteristic.Class = legacyRow.Class;
+            }
+
             foreach (LegacyRenumberService.RenumberPlanEntry entry in renumberPlan.ToApply)
             {
                 if (entry.IsDisplaced)
-                    entry.Characteristic.LegacyNumber = null;
+                {
+                    entry.Characteristic.LegacyBalloonNumber = null;
+                    continue;
+                }
+
+                StampFromLegacyRow(entry.Characteristic);
             }
+
+            foreach (Characteristic characteristic in renumberPlan.AlreadyCorrect)
+                StampFromLegacyRow(characteristic);
 
             PersistenceManager.SaveProject(_dataFilePath, _projectData);
 
@@ -291,8 +570,8 @@ namespace BINSPECTION.UI
                 {
                     MessageBox.Show(
                         this,
-                        "\"" + typed + "\" isn't one of the available Binspection balloon numbers for legacy #" +
-                        row.LegacyNumber + ". Enter one of the numbers named in that row, type \"new\" to add a " +
+                        "\"" + typed + "\" isn't one of the available Binspection balloon numbers for legacy balloon #" +
+                        row.LegacyBalloonNumber + ". Enter one of the numbers named in that row, type \"new\" to add a " +
                         "brand new characteristic, or leave it blank to use the match shown (or skip, if there is none).",
                         "Legacy Conversion");
 
@@ -357,7 +636,7 @@ namespace BINSPECTION.UI
             {
                 summary.AppendLine();
                 summary.AppendLine(
-                    displaced.Count + " balloon(s) with no legacy number of their own were moved out of the way to make room:");
+                    displaced.Count + " balloon(s) with no legacy balloon number of their own were moved out of the way to make room:");
 
                 foreach (LegacyRenumberService.RenumberPlanEntry entry in displaced)
                 {
@@ -372,7 +651,7 @@ namespace BINSPECTION.UI
                 summary.AppendLine();
                 summary.AppendLine(
                     renumberPlan.Collisions.Count +
-                    " legacy number(s) could not be applied (recorded as a reference only) - resolve manually:");
+                    " legacy balloon number(s) could not be applied (recorded as a reference only) - resolve manually:");
 
                 foreach (string collision in renumberPlan.Collisions)
                     summary.AppendLine("   " + collision);
@@ -383,7 +662,7 @@ namespace BINSPECTION.UI
                 summary.AppendLine();
                 summary.AppendLine(
                     renumberPlan.InvalidFormat.Count +
-                    " legacy number(s) aren't a valid balloon number format (recorded as a reference only): " +
+                    " legacy balloon number(s) aren't a valid balloon number format (recorded as a reference only): " +
                     string.Join(", ", renumberPlan.InvalidFormat));
             }
 
@@ -406,7 +685,7 @@ namespace BINSPECTION.UI
                 summary.AppendLine();
                 summary.AppendLine(
                     leftUnmatched.Count + " left unmatched: " +
-                    string.Join(", ", leftUnmatched.Select(row => row.LegacyNumber)));
+                    string.Join(", ", leftUnmatched.Select(row => row.LegacyBalloonNumber)));
             }
 
             return summary.ToString();
@@ -417,10 +696,10 @@ namespace BINSPECTION.UI
             DialogResult = false;
         }
 
-        // Orders legacy numbers the way a person reading the source
-        // spreadsheet would - "2" before "10", "9.1" before "9.2" - rather
-        // than plain string order.
-        private class LegacyNumberComparer : IComparer<string>
+        // Orders legacy balloon numbers the way a person reading the
+        // source spreadsheet would - "2" before "10", "9.1" before "9.2" -
+        // rather than plain string order.
+        private class LegacyBalloonNumberComparer : IComparer<string>
         {
             public int Compare(string x, string y)
             {

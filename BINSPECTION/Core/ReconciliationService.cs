@@ -29,6 +29,28 @@ namespace BINSPECTION.Core
 
             BalloonManager balloonManager = new BalloonManager();
 
+            // Computed ONCE and shared by every FindExistingBalloon call
+            // below plus FindOrphanedBalloons - each of those used to call
+            // DrawingSheetHelper.GetAllViewsBySheet (via
+            // AnnotationScanner.WalkAllAnnotations) itself with no sheet
+            // restriction, which activates every sheet in the drawing to
+            // attribute its views correctly (see that method's remarks).
+            // With one such call per PERSISTED CHARACTERISTIC, a reconcile
+            // over 40 characteristics on a 5-sheet drawing meant cycling
+            // through every sheet 40+ times before this. Computed once
+            // here across the WHOLE drawing (not scoped to any sheet
+            // selection - a characteristic can be resolved on any sheet)
+            // and passed into every call below cuts that back to one pass.
+            DrawingDoc drawing = model as DrawingDoc;
+
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet =
+                DrawingSheetHelper.GetAllViewsBySheet(drawing);
+
+            // Stashed on the result so RecreateMissingBalloons can reuse
+            // this same cache instead of recomputing it once per balloon it
+            // recreates.
+            result.ViewsBySheet = viewsBySheet;
+
             // Every display number that has ever been saved for this
             // drawing, whether or not it resolves right now - used below to
             // figure out which on-sheet balloons are orphaned.
@@ -156,7 +178,8 @@ namespace BINSPECTION.Core
 
                 Note existingBalloon = balloonManager.FindExistingBalloon(
                     model,
-                    characteristic.DisplayNumber);
+                    characteristic.DisplayNumber,
+                    viewsBySheet);
 
                 // Only the FIRST line of an auto-split multi-line note gets
                 // a real physical balloon (showing its own "N.1" display
@@ -166,7 +189,10 @@ namespace BINSPECTION.Core
                 // balloon" to offer recreating for one: it's either
                 // resolvable (this branch, mirroring the shared note's
                 // liveness) or not (handled above).
-                if (existingBalloon == null && syntheticMarker < 0)
+                // A grouped member after the first ("10.1") is likewise
+                // data-only by design - its group anchor's "10" balloon
+                // stands for it (Characteristic.SharesGroupBalloon).
+                if (existingBalloon == null && syntheticMarker < 0 && !characteristic.SharesGroupBalloon)
                 {
                     // The source is still there, but its balloon note is
                     // missing from the sheet - this is exactly the
@@ -188,7 +214,7 @@ namespace BINSPECTION.Core
                 result.Matched.Add(characteristic);
             }
 
-            FindOrphanedBalloons(model, accountedForNumbers, result);
+            FindOrphanedBalloons(model, accountedForNumbers, result, viewsBySheet);
 
             return result;
         }
@@ -267,41 +293,27 @@ namespace BINSPECTION.Core
         private static void FindOrphanedBalloons(
             ModelDoc2 model,
             HashSet<string> accountedForNumbers,
-            ReconciliationResult result)
+            ReconciliationResult result,
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null)
         {
             DrawingDoc drawing = model as DrawingDoc;
 
             if (drawing == null)
                 return;
 
-            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view) =>
+            AnnotationScanner.WalkAllAnnotations(drawing, (annotation, view, sheetName) =>
             {
-                // Same exclusion as BalloonManager.FindExistingBalloon - a
-                // plain numeric title-block/border field (e.g. a drawing
-                // zone reference marker) would otherwise get reported as an
+                // Same "is this a BINSPECTION balloon" test as
+                // BalloonManager.FindExistingBalloon - excludes title-block
+                // content AND any numeric note that isn't on the Binspection
+                // layer (a user's own "12" note, a SOLIDWORKS Inspection
+                // balloon), which would otherwise get reported as an
                 // "orphaned balloon" and offered for deletion.
-                if (AnnotationScanner.IsOwnedBySheetFormat(annotation))
+                Note note;
+                string displayNumber;
+
+                if (!BalloonManager.IsBinspectionBalloon(annotation, out note, out displayNumber))
                     return;
-
-                Note note =
-                    annotation.GetSpecificAnnotation() as Note;
-
-                if (note == null)
-                    return;
-
-                // Same normalization as BalloonManager.FindExistingBalloon -
-                // raw GetText() can carry formatting markup after a
-                // save/reopen cycle that would otherwise make this regex
-                // miss a real balloon.
-                string normalizedText =
-                    BalloonManager.NormalizeNoteText(note.GetText());
-
-                Match match = BalloonManager.BalloonTextPattern.Match(normalizedText);
-
-                if (!match.Success)
-                    return;
-
-                string displayNumber = match.Groups[1].Value;
 
                 // A sheet-level balloon note can be visited more than once
                 // by WalkAllAnnotations (once per view on its sheet - see
@@ -313,7 +325,7 @@ namespace BINSPECTION.Core
                 {
                     result.OrphanedBalloonNumbers.Add(displayNumber);
                 }
-            });
+            }, viewsBySheet);
         }
 
         // Recreates a balloon for every entry in MissingBalloons, reusing
@@ -328,18 +340,87 @@ namespace BINSPECTION.Core
             ReconciliationResult result,
             BalloonManager balloonManager)
         {
+            // Built ONCE for however many balloons this reconciliation is
+            // about to recreate, not re-walked per balloon - same reasoning
+            // as CommandManagerHandler.OnCreateBalloons' existingBalloonIndex
+            // (see CreateBalloon's remarks). A drawing with a lot of
+            // missing balloons to recreate is exactly the "large" case
+            // where the per-call walk's cost used to add up badly.
+            Dictionary<string, Note> existingBalloonIndex =
+                balloonManager.BuildExistingBalloonIndex(model as DrawingDoc, result.ViewsBySheet);
+
+            // Every record a recreated balloon might stand for besides its
+            // own - see RecordNewBalloonPersistId.
+            List<Characteristic> everyone = new List<Characteristic>(result.Matched);
+
+            foreach (MissingBalloonEntry entry in result.MissingBalloons)
+                everyone.Add(entry.Characteristic);
+
+            foreach (UnresolvableEntry entry in result.Unresolvable)
+                everyone.Add(entry.Characteristic);
+
             foreach (MissingBalloonEntry entry in result.MissingBalloons)
             {
-                balloonManager.CreateBalloon(
+                Note note = balloonManager.CreateBalloon(
                     model,
                     entry.ResolvedAnnotationSource,
                     entry.Characteristic.DisplayNumber,
-                    entry.Characteristic.SheetName);
+                    entry.Characteristic.SheetName,
+                    sourceView: null,
+                    viewsBySheet: result.ViewsBySheet,
+                    existingBalloonIndex: existingBalloonIndex);
+
+                if (note != null)
+                {
+                    RecordNewBalloonPersistId(
+                        entry.Characteristic, balloonManager.GetBalloonPersistId(model, note), everyone);
+                }
 
                 result.Matched.Add(entry.Characteristic);
             }
 
             result.MissingBalloons.Clear();
+        }
+
+        // A recreated balloon is a brand-new note with a new persistent id,
+        // so the old BalloonPersistId now points at a deleted note. Writing
+        // the new id back lets later lookups by id (Balloon Manager's
+        // jump-to-row - see BalloonGridService.FindBalloonAnnotation; Save/
+        // Restore Position) hit directly instead of falling back to walking
+        // sheets. The callers (Create/Restore/Refresh Balloons) save these
+        // same Characteristic instances afterwards, so the update persists
+        // with no extra save here. Records that share this one note get the
+        // same new id: a multi-value balloon's "<id>#n" values, a group's
+        // data-only members (SharesGroupBalloon), and anything still holding
+        // the old id.
+        private static void RecordNewBalloonPersistId(
+            Characteristic owner,
+            string newBalloonPersistId,
+            List<Characteristic> everyone)
+        {
+            if (string.IsNullOrEmpty(newBalloonPersistId))
+                return;
+
+            string oldBalloonPersistId = owner.BalloonPersistId;
+            string siblingPrefix = string.IsNullOrEmpty(owner.PersistentRefId) ? null : owner.PersistentRefId + "#";
+
+            owner.BalloonPersistId = newBalloonPersistId;
+
+            foreach (Characteristic other in everyone)
+            {
+                if (other == owner)
+                    continue;
+
+                bool sharesNote =
+                    (!string.IsNullOrEmpty(oldBalloonPersistId) && other.BalloonPersistId == oldBalloonPersistId) ||
+                    (siblingPrefix != null && other.PersistentRefId != null &&
+                        other.PersistentRefId.StartsWith(siblingPrefix, System.StringComparison.Ordinal)) ||
+                    (other.SharesGroupBalloon && !other.IsUnnumbered && !owner.SubNumber.HasValue &&
+                        other.Number == owner.Number);
+
+                if (sharesNote)
+                    other.BalloonPersistId = newBalloonPersistId;
+            }
         }
 
         // Deletes every balloon note whose number was found on the sheet

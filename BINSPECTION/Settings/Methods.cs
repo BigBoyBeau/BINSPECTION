@@ -1,3 +1,0 @@
-﻿//LoadSettings()
-
-//SaveSettings()

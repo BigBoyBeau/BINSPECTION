@@ -77,20 +77,30 @@ namespace BINSPECTION.Core
         {
             public List<RenumberPlanEntry> ToApply { get; } = new List<RenumberPlanEntry>();
 
-            // Legacy numbers that can't be parsed into a valid balloon
-            // display number at all - reported so the caller can still
-            // record them as a reference-only LegacyNumber.
+            // Characteristics whose live DisplayNumber ALREADY equals the
+            // legacy balloon number matched to them this run - no rename
+            // needed, but still a genuine successful match the caller
+            // should record (LegacyBalloonNumber/Method/Class carried
+            // over), same as anything in ToApply. Excludes a characteristic
+            // that ALSO shows up in a rejected Collision below - being
+            // "already correct" per ONE request doesn't cancel out a
+            // conflicting SECOND request for the same characteristic.
+            public List<Characteristic> AlreadyCorrect { get; } = new List<Characteristic>();
+
+            // Legacy balloon numbers that can't be parsed into a valid
+            // balloon display number at all - reported so the caller can
+            // still record them as a reference-only LegacyBalloonNumber.
             public List<string> InvalidFormat { get; } = new List<string>();
 
-            // "Legacy #X and #Y both want to become (<target>) - resolve
-            // which one should." One line per target two DIFFERENT legacy
-            // numbers both requested this run - the only case this plan
-            // can't resolve on its own.
+            // "Legacy Balloon #X and #Y both want to become (<target>) -
+            // resolve which one should." One line per target two DIFFERENT
+            // legacy balloon numbers both requested this run - the only
+            // case this plan can't resolve on its own.
             public List<string> Collisions { get; } = new List<string>();
         }
 
         // requestedLegacyNumbers should list every characteristic getting a
-        // legacy number this run. allCharacteristics is every
+        // legacy balloon number this run. allCharacteristics is every
         // characteristic on the drawing, used both to seed which display
         // numbers are already taken and as the source of truth for what
         // still counts as "used" when picking a free number to bump a
@@ -108,28 +118,55 @@ namespace BINSPECTION.Core
 
             // Parse every request up front - format failures are reported
             // and dropped before any collision reasoning happens.
-            List<(Characteristic Characteristic, string LegacyNumber, int NewNumber, int? NewSubNumber, string NewDisplayNumber)> parsed =
+            List<(Characteristic Characteristic, string LegacyBalloonNumber, int NewNumber, int? NewSubNumber, string NewDisplayNumber)> parsed =
                 new List<(Characteristic, string, int, int?, string)>();
+
+            HashSet<Characteristic> alreadyCorrectCandidates = new HashSet<Characteristic>();
 
             foreach (KeyValuePair<Characteristic, string> request in requestedLegacyNumbers)
             {
-                string legacyNumber = request.Value?.Trim();
+                string legacyBalloonNumber = request.Value?.Trim();
 
                 int newNumber;
                 int? newSubNumber;
                 string newDisplayNumber;
 
-                if (!TryParseDisplayNumber(legacyNumber, out newNumber, out newSubNumber, out newDisplayNumber))
+                if (!TryParseDisplayNumber(legacyBalloonNumber, out newNumber, out newSubNumber, out newDisplayNumber))
                 {
-                    plan.InvalidFormat.Add(legacyNumber);
+                    plan.InvalidFormat.Add(legacyBalloonNumber);
                     continue;
                 }
 
                 if (newDisplayNumber == request.Key.DisplayNumber)
-                    continue; // already correct - nothing to do
+                {
+                    // Already correct - nothing to RENAME, but still
+                    // tentatively a successful match (see AlreadyCorrect's
+                    // remarks) - confirmed once collision detection below
+                    // has had a chance to reject it instead, in case some
+                    // OTHER legacy row also matched this same characteristic
+                    // wanting a genuinely different number.
+                    alreadyCorrectCandidates.Add(request.Key);
+                    continue;
+                }
 
-                parsed.Add((request.Key, legacyNumber, newNumber, newSubNumber, newDisplayNumber));
+                parsed.Add((request.Key, legacyBalloonNumber, newNumber, newSubNumber, newDisplayNumber));
             }
+
+            // Multiple legacy rows can legitimately target the exact same
+            // characteristic + target number - e.g. several sample-
+            // measurement rows recorded under one "OP 30 (2)" label (see
+            // [[binspection_legacy_number_matching]]'s 2026-09-21 OP-
+            // scoping note), or a user manually pointing two different
+            // legacy rows at the same balloon via the "Assign" override.
+            // Collapse those down to ONE request per (Characteristic,
+            // NewDisplayNumber) pair before collision detection below - the
+            // group-by-target-number check right after this only cares
+            // about DIFFERENT legacy numbers fighting over one target, not
+            // the same request arriving more than once.
+            parsed = parsed
+                .GroupBy(r => (r.Characteristic, r.NewDisplayNumber))
+                .Select(g => g.First())
+                .ToList();
 
             // A target two DIFFERENT characteristics both asked for this
             // run is a genuine conflict between two legitimate requests -
@@ -139,17 +176,52 @@ namespace BINSPECTION.Core
 
             foreach (var group in parsed.GroupBy(r => r.NewDisplayNumber, StringComparer.OrdinalIgnoreCase))
             {
-                List<string> groupLegacyNumbers = group.Select(r => r.LegacyNumber).ToList();
+                List<string> groupLegacyBalloonNumbers = group.Select(r => r.LegacyBalloonNumber).ToList();
 
-                if (groupLegacyNumbers.Count > 1)
+                if (groupLegacyBalloonNumbers.Count > 1)
                 {
                     plan.Collisions.Add(
-                        "Legacy #" + string.Join(" and #", groupLegacyNumbers) +
+                        "Legacy Balloon #" + string.Join(" and #", groupLegacyBalloonNumbers) +
                         " all want to become (" + group.Key + ") - resolve which one should.");
 
                     foreach (var entry in group)
                         rejected.Add(entry.Characteristic);
                 }
+            }
+
+            // The REVERSE conflict: the SAME characteristic requested as
+            // two (or more) DIFFERENT target numbers this run - e.g. two
+            // distinct legacy rows both picking the same physical
+            // dimension as their best match, a real risk now that the
+            // matcher's tie-breaking signals are reduced (see
+            // [[binspection_legacy_number_matching]]'s 2026-09-21 note).
+            // Without this check, BOTH requests made it into ToApply below
+            // with the SAME OldDisplayNumber (read from the characteristic
+            // BEFORE anything mutates it), and whichever got applied LAST
+            // silently overwrote the other's rename - the exact "matched,
+            // but its number never actually changed" symptom this exists
+            // to catch instead of silently mis-happening.
+            foreach (var group in parsed.GroupBy(r => r.Characteristic))
+            {
+                List<string> distinctTargets = group.Select(r => r.NewDisplayNumber).Distinct().ToList();
+
+                if (distinctTargets.Count > 1)
+                {
+                    plan.Collisions.Add(
+                        "(" + group.Key.DisplayNumber + ") " + (group.Key.DimensionName ?? "") +
+                        " was matched by more than one legacy row wanting different numbers (" +
+                        string.Join(", ", group.Select(r => "#" + r.LegacyBalloonNumber + " -> (" + r.NewDisplayNumber + ")")) +
+                        ") - resolve which one is correct.");
+
+                    foreach (var entry in group)
+                        rejected.Add(entry.Characteristic);
+                }
+            }
+
+            foreach (Characteristic characteristic in alreadyCorrectCandidates)
+            {
+                if (!rejected.Contains(characteristic))
+                    plan.AlreadyCorrect.Add(characteristic);
             }
 
             HashSet<Characteristic> requestedCharacteristics =
@@ -232,11 +304,47 @@ namespace BINSPECTION.Core
         // persisting the characteristics afterward.
         public static void Apply(ModelDoc2 model, RenumberPlan plan, BalloonManager balloonManager)
         {
+            // Computed ONCE for this whole batch and shared by every
+            // FindExistingBalloon call below - that call used to have no
+            // cache at all, so it fell back to an unscoped
+            // DrawingSheetHelper.GetAllViewsBySheet walk (activating every
+            // sheet in the drawing) once PER ENTRY. Converting a whole
+            // legacy project routinely renumbers most of the balloons on a
+            // drawing, so that meant cycling through every sheet dozens of
+            // times over for one Apply call - same class of bug already
+            // fixed for Create/Refresh/Restore Balloons.
+            //
+            // Scoped to just the sheets this plan's entries actually live
+            // on (their own Characteristic.SheetName), not the whole
+            // drawing - a legacy conversion run only ever touches balloons
+            // already known to belong to specific sheets. Falls back to a
+            // full unscoped walk (old behavior, still correct, just not
+            // optimized) if ANY entry's sheet is unknown - an older
+            // characteristic that predates SheetName tracking (see
+            // Models/Characteristics.cs remarks) could live on any sheet,
+            // and guessing wrong would silently leave its balloon's live
+            // text stale while its JSON number still changed underneath it.
+            DrawingDoc drawing = model as DrawingDoc;
+
+            List<string> entrySheetNames = plan.ToApply
+                .Select(entry => entry.Characteristic.SheetName)
+                .ToList();
+
+            bool everySheetKnown =
+                entrySheetNames.All(name => !string.IsNullOrEmpty(name));
+
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet =
+                everySheetKnown
+                    ? DrawingSheetHelper.GetAllViewsBySheet(
+                        drawing, entrySheetNames.Distinct(StringComparer.OrdinalIgnoreCase))
+                    : DrawingSheetHelper.GetAllViewsBySheet(drawing);
+
             Dictionary<RenumberPlanEntry, Note> notesByEntry = new Dictionary<RenumberPlanEntry, Note>();
 
             foreach (RenumberPlanEntry entry in plan.ToApply)
             {
-                notesByEntry[entry] = balloonManager.FindExistingBalloon(model, entry.OldDisplayNumber);
+                notesByEntry[entry] =
+                    balloonManager.FindExistingBalloon(model, entry.OldDisplayNumber, viewsBySheet);
             }
 
             bool anyNoteChanged = false;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -39,7 +40,7 @@ namespace BINSPECTION.UI
             public string SheetName { get; set; }
             public bool HasBalloon { get; set; }
             public bool IsUnnumbered { get; set; }
-            public string LegacyNumber { get; set; }
+            public string LegacyBalloonNumber { get; set; }
             public string ManualNumberInput { get; set; }
             public bool HasCharacteristic { get; set; }
             public string Method { get; set; }
@@ -162,6 +163,50 @@ namespace BINSPECTION.UI
             RefreshRows();
         }
 
+        // Re-reads the sidecar JSON from disk and repopulates this window's
+        // grid from it - added 2026-09-21 (user report: after deleting the
+        // .binspection.json file and running Delete All Balloons, an
+        // ALREADY-OPEN Balloon Manager window kept showing its old data).
+        // OnOpenBalloonManager's "if already open, just Activate()" fast
+        // path (see CommandManagerHandler.cs) never touched this window's
+        // data at all - every field here was loaded once, at construction,
+        // and nothing makes it notice a change some OTHER command (Delete
+        // All Balloons, Refresh Balloons, Legacy Conversion run from a
+        // different window, or the user deleting the file by hand) made
+        // underneath it while it stayed open. Mutates _projectData's OWN
+        // properties in place rather than replacing the reference -
+        // OnOpenBalloonManager's caller captured that same ProjectData
+        // object in its Closed-event closure (to refresh CharacteristicManager
+        // once this window finally closes), so swapping in a new object
+        // here would leave THAT closure holding a stale reference instead.
+        public void ReloadFromDisk()
+        {
+            ProjectData fresh = PersistenceManager.LoadProject(_dataFilePath);
+
+            _projectData.Characteristics = fresh.Characteristics;
+            _projectData.ActiveSheets = fresh.ActiveSheets;
+            _projectData.NumberRanges = fresh.NumberRanges;
+            _projectData.ToleranceSets = fresh.ToleranceSets;
+            _projectData.SheetToleranceAssignments = fresh.SheetToleranceAssignments;
+            _projectData.ReportHeaderSettings = fresh.ReportHeaderSettings;
+            _projectData.ClassOptions = fresh.ClassOptions;
+            _projectData.MethodOptions = fresh.MethodOptions;
+
+            MethodOptions.Clear();
+
+            foreach (string option in _projectData.MethodOptions)
+                MethodOptions.Add(option);
+
+            ClassOptions.Clear();
+
+            foreach (string option in _projectData.ClassOptions)
+                ClassOptions.Add(option);
+
+            DataChanged = true;
+
+            RefreshRows();
+        }
+
         // HandleProcessCorruptedStateExceptions + the app.config policy it
         // requires (see App.config) are what let the catch below actually
         // receive an AccessViolationException/SEHException instead of
@@ -204,7 +249,7 @@ namespace BINSPECTION.UI
                     SheetName = row.SheetName,
                     HasBalloon = row.HasBalloon,
                     IsUnnumbered = row.IsUnnumbered,
-                    LegacyNumber = row.LegacyNumber,
+                    LegacyBalloonNumber = row.LegacyBalloonNumber,
                     HasCharacteristic = row.HasCharacteristic,
                     Method = row.Method,
                     Class = row.Class,
@@ -228,37 +273,20 @@ namespace BINSPECTION.UI
                 return;
             }
 
-            BalloonGridService.AddBalloons(_model, _dataFilePath, checkedRows, _projectData);
-            DataChanged = true;
+            ReportResult(BalloonGridService.AddBalloons(_model, _dataFilePath, checkedRows, _projectData));
             RefreshRows();
         }
 
         private void Group_Click(object sender, RoutedEventArgs e)
         {
-            string error = BalloonGridService.GroupBalloons(_model, _dataFilePath, CheckedSourceRows(), _projectData);
-
-            if (error != null)
-            {
-                MessageBox.Show(this, error, "Balloon Manager");
-                return;
-            }
-
-            DataChanged = true;
-            RefreshRows();
+            if (ReportResult(BalloonGridService.GroupBalloons(_model, _dataFilePath, CheckedSourceRows(), _projectData)))
+                RefreshRows();
         }
 
         private void Ungroup_Click(object sender, RoutedEventArgs e)
         {
-            string error = BalloonGridService.UngroupBalloons(_model, _dataFilePath, CheckedSourceRows(), _projectData);
-
-            if (error != null)
-            {
-                MessageBox.Show(this, error, "Balloon Manager");
-                return;
-            }
-
-            DataChanged = true;
-            RefreshRows();
+            if (ReportResult(BalloonGridService.UngroupBalloons(_model, _dataFilePath, CheckedSourceRows(), _projectData)))
+                RefreshRows();
         }
 
         private void MarkUnnumbered_Click(object sender, RoutedEventArgs e)
@@ -271,8 +299,7 @@ namespace BINSPECTION.UI
                 return;
             }
 
-            BalloonGridService.MarkUnnumbered(_model, _dataFilePath, checkedRows, _projectData);
-            DataChanged = true;
+            ReportResult(BalloonGridService.MarkUnnumbered(_model, _dataFilePath, checkedRows, _projectData));
             RefreshRows();
         }
 
@@ -286,14 +313,37 @@ namespace BINSPECTION.UI
                 return;
             }
 
-            BalloonGridService.ReNumberBalloons(_model, _dataFilePath, checkedRows, _projectData);
-            DataChanged = true;
+            ReportResult(BalloonGridService.ReNumberBalloons(_model, _dataFilePath, checkedRows, _projectData));
             RefreshRows();
         }
 
         private void LegacyConversion_Click(object sender, RoutedEventArgs e)
         {
-            LegacyConversionWindow window = new LegacyConversionWindow(_model, _dataFilePath, _projectData);
+            DrawingDoc drawing = _model as DrawingDoc;
+
+            List<string> sheetNames = DrawingSheetHelper.GetSheetNames(drawing);
+
+            if (sheetNames.Count == 0)
+            {
+                MessageBox.Show(this, "No sheets were found in this drawing.", "Legacy Conversion");
+                return;
+            }
+
+            List<string> previouslySelected =
+                _projectData?.ActiveSheets != null && _projectData.ActiveSheets.Count > 0
+                    ? _projectData.ActiveSheets
+                    : sheetNames;
+
+            LegacyConversionSheetSelectionWindow sheetPicker =
+                new LegacyConversionSheetSelectionWindow(sheetNames, previouslySelected);
+
+            bool? sheetsChosen = sheetPicker.ShowDialog();
+
+            if (sheetsChosen != true || sheetPicker.SelectedSheets == null)
+                return;
+
+            LegacyConversionWindow window =
+                new LegacyConversionWindow(_model, _dataFilePath, _projectData, sheetPicker.SelectedSheets);
 
             bool? accepted = window.ShowDialog();
 
@@ -301,6 +351,48 @@ namespace BINSPECTION.UI
             {
                 DataChanged = true;
                 RefreshRows();
+            }
+        }
+
+        // Manual trigger for ReloadFromDisk (added 2026-09-21, explicit
+        // user request) - lets the user force this window to re-read the
+        // sidecar JSON without having to close it and re-run the Balloon
+        // Manager command (which already does this automatically when
+        // reactivating an existing window - see CommandManagerHandler.
+        // OnOpenBalloonManager). If the data file no longer exists (e.g.
+        // deleted by hand, or Delete All Balloons just wiped it), this
+        // correctly clears the grid back to empty rather than leaving
+        // stale data showing - see ReloadFromDisk/PersistenceManager.
+        // LoadProject's remarks for why a missing file degrades to an
+        // empty ProjectData instead of erroring.
+        //
+        // Wrapped with a visible confirmation/error 2026-09-21 (user
+        // report: "the clear cache button is not working") - the original
+        // version called ReloadFromDisk with no feedback at all, so a
+        // successful-but-no-visible-change reload (the file on disk
+        // genuinely hadn't changed) and a silently-swallowed exception
+        // (this add-in runs hosted inside SolidWorks' own COM message
+        // loop, which can eat an unhandled exception from a button
+        // handler without any visible sign) looked IDENTICAL to the user -
+        // nothing happens either way. This makes both cases visible.
+        private void ClearCache_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                bool fileExists = !string.IsNullOrEmpty(_dataFilePath) && File.Exists(_dataFilePath);
+
+                ReloadFromDisk();
+
+                MessageBox.Show(
+                    this,
+                    fileExists
+                        ? "Reloaded from " + _dataFilePath + " (" + Rows.Count + " row(s))."
+                        : "No saved data file found at " + _dataFilePath + " - grid cleared to empty.",
+                    "Balloon Manager");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Couldn't reload from disk: " + ex.Message, "Balloon Manager");
             }
         }
 
@@ -362,13 +454,11 @@ namespace BINSPECTION.UI
             if (!row.HasCharacteristic)
                 return;
 
-            BalloonGridService.UpdateAttributes(
-                _dataFilePath, row.Source, row.Method, row.Class, _projectData);
+            ReportResult(BalloonGridService.UpdateAttributes(
+                _dataFilePath, row.Source, row.Method, row.Class, _projectData));
 
             AddIfNew(MethodOptions, row.Method);
             AddIfNew(ClassOptions, row.Class);
-
-            DataChanged = true;
         }
 
         // Writes the "Set Method"/"Set Classification" boxes to every
@@ -394,13 +484,12 @@ namespace BINSPECTION.UI
                 return;
             }
 
-            BalloonGridService.UpdateAttributesForRows(
-                _dataFilePath, checkedRows, BulkMethod, BulkClass, _projectData);
+            ReportResult(BalloonGridService.UpdateAttributesForRows(
+                _dataFilePath, checkedRows, BulkMethod, BulkClass, _projectData));
 
             AddIfNew(MethodOptions, BulkMethod);
             AddIfNew(ClassOptions, BulkClass);
 
-            DataChanged = true;
             RefreshRows();
         }
 
@@ -417,9 +506,7 @@ namespace BINSPECTION.UI
 
         private void ApplyManualRenumber(GridRow row, string typed)
         {
-            string error;
-
-            bool applied = BalloonGridService.TryManualRenumber(
+            ReportResult(BalloonGridService.TryManualRenumber(
                 _model,
                 _dataFilePath,
                 row.Source,
@@ -429,15 +516,8 @@ namespace BINSPECTION.UI
                     this,
                     "Balloon " + targetNumber + " is already assigned to another characteristic. Swap the two numbers?",
                     "Balloon Manager",
-                    MessageBoxButton.YesNo) == MessageBoxResult.Yes,
-                out error);
+                    MessageBoxButton.YesNo) == MessageBoxResult.Yes));
 
-            if (!applied && error != null)
-            {
-                MessageBox.Show(this, error, "Balloon Manager");
-            }
-
-            DataChanged = true;
             RefreshRows();
         }
 
@@ -463,34 +543,36 @@ namespace BINSPECTION.UI
                 string.Equals(targetSheet, row.Source.SheetName, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            string error;
+            ReportResult(BalloonGridService.MoveBalloonToSheet(
+                _model, _dataFilePath, row.Source, targetSheet, _projectData));
 
-            bool applied = BalloonGridService.MoveBalloonToSheet(
-                _model, _dataFilePath, row.Source, targetSheet, _projectData, out error);
-
-            if (!applied && error != null)
-            {
-                MessageBox.Show(this, error, "Balloon Manager");
-            }
-
-            DataChanged = true;
+            // Always rebuilt, even on failure, so the row's Sheet combo
+            // snaps back to wherever the balloon actually is.
             RefreshRows();
         }
 
         private void ApplyBasicToggle(GridRow row, bool isBasic)
         {
-            string error;
+            ReportResult(BalloonGridService.SetBasic(
+                _model, _dataFilePath, row.Source, isBasic, _projectData));
 
-            bool applied = BalloonGridService.SetBasic(
-                _model, _dataFilePath, row.Source, isBasic, _projectData, out error);
-
-            if (!applied && error != null)
-            {
-                MessageBox.Show(this, error, "Balloon Manager");
-            }
-
-            DataChanged = true;
+            // Always rebuilt, even on failure, so the Basic checkbox snaps
+            // back to the dimension's real state.
             RefreshRows();
+        }
+
+        // Shows whatever a BalloonGridService action needs to tell the user
+        // (a refusal, per-row failures, warnings, a failed save) and
+        // returns whether it actually changed anything.
+        private bool ReportResult(GridOperationResult result)
+        {
+            if (result.Message != null)
+                MessageBox.Show(this, result.Message, "Balloon Manager");
+
+            if (result.Changed)
+                DataChanged = true;
+
+            return result.Changed;
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)
@@ -546,7 +628,7 @@ namespace BINSPECTION.UI
                 if (!string.IsNullOrEmpty(source.SheetName))
                     DrawingSheetHelper.ActivateSheet(_drawing, source.SheetName);
 
-                Annotation annotation = ResolveAnnotation(source);
+                IAnnotation annotation = ResolveAnnotation(source);
 
                 if (annotation == null)
                     return;
@@ -571,25 +653,14 @@ namespace BINSPECTION.UI
         // one (AnnotationSource), otherwise the balloon note already placed
         // for it (a GD&T/note/surface-finish balloon, a dimension whose live
         // annotation didn't resolve this scan, or one flagged
-        // !IsDimensionResolved - see its remarks) - same fallback
-        // BalloonManager itself uses elsewhere to find a balloon by its
-        // displayed number.
-        private Annotation ResolveAnnotation(BalloonGridRow source)
+        // !IsDimensionResolved - see its remarks), found without cycling
+        // through every sheet - see BalloonGridService.FindBalloonAnnotation.
+        private IAnnotation ResolveAnnotation(BalloonGridRow source)
         {
             if (source.AnnotationSource != null && source.IsDimensionResolved)
-                return source.AnnotationSource.GetAnnotation() as Annotation;
+                return source.AnnotationSource.GetAnnotation() as IAnnotation;
 
-            return ResolveBalloonNote(source.Characteristic);
-        }
-
-        private Annotation ResolveBalloonNote(Characteristic characteristic)
-        {
-            if (characteristic == null || characteristic.IsUnnumbered || characteristic.Number <= 0)
-                return null;
-
-            Note note = new BalloonManager().FindExistingBalloon(_model, characteristic.DisplayNumber);
-
-            return note?.GetAnnotation() as Annotation;
+            return BalloonGridService.FindBalloonAnnotation(_model, source.Characteristic);
         }
     }
 }

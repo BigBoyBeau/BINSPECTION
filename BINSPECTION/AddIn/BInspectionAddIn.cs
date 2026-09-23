@@ -15,6 +15,8 @@ namespace BINSPECTION
         private ISldWorks _swApp;
         private int _addinID;
         private CommandManagerHandler _commandManager;
+        private TaskpaneView _taskpaneView;
+        private UI.TaskPane.TaskPaneHostControl _taskPaneHostControl;
         public void OnCreateBalloons()
         {
             _commandManager.OnCreateBalloons();
@@ -144,6 +146,36 @@ namespace BINSPECTION
 
                 _commandManager.CreateCommandManager();
 
+                // The docked Task Pane hosting Balloon Manager. Failure
+                // here (e.g. the ActiveX control couldn't be COM-activated)
+                // is caught on its own rather than let it fail the whole
+                // add-in load - the ribbon/menu commands still work without
+                // it, Balloon Manager just reports itself unavailable (see
+                // CommandManagerHandler.OnOpenBalloonManager).
+                try
+                {
+                    string[] taskPaneIconPaths =
+                        Core.CommandIconGenerator.BuildMainIconList();
+
+                    _taskpaneView =
+                        _swApp.CreateTaskpaneView3(taskPaneIconPaths, "BINSPECTION");
+
+                    if (_taskpaneView != null)
+                    {
+                        object control =
+                            _taskpaneView.AddControl("BINSPECTION.TaskPaneHostControl", "");
+
+                        _taskPaneHostControl = control as UI.TaskPane.TaskPaneHostControl;
+
+                        _commandManager.SetTaskPane(_taskpaneView, _taskPaneHostControl);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"BInspectionAddin Task Pane Error: {ex}");
+                }
+
                 // Previously showed an OK popup ("BINSPECTION Loaded") every
                 // time SolidWorks started the add-in. That's an interruption
                 // for normal use now that the add-in is stable, so this is
@@ -169,6 +201,19 @@ namespace BINSPECTION
                 if (_commandManager != null)
                 {
                     _commandManager.RemoveCommandManager();
+                }
+
+                try
+                {
+                    _taskpaneView?.DeleteView();
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    _taskpaneView = null;
+                    _taskPaneHostControl = null;
                 }
 
                 return true;

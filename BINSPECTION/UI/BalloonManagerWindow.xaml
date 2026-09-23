@@ -76,7 +76,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridCheckBoxColumn Header="Unnumbered" Binding="{Binding IsUnnumbered}" IsReadOnly="True" Width="80" />
-                <DataGridTextColumn Header="Legacy #" Binding="{Binding LegacyNumber}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn Header="Legacy Balloon #" Binding="{Binding LegacyBalloonNumber}" IsReadOnly="True" Width="100" />
                 <DataGridTextColumn x:Name="ManualNumberColumn" Header="New #" Binding="{Binding ManualNumberInput}" Width="70" />
                 <DataGridCheckBoxColumn x:Name="BasicColumn" Header="Basic" Binding="{Binding IsBasic}" Width="45" />
 
@@ -123,6 +123,8 @@
                 <Button Content="Un-Number" Width="80" Margin="0,0,6,0" Click="MarkUnnumbered_Click" />
                 <Button Content="Re-Number" Width="80" Margin="0,0,6,0" Click="ReNumber_Click" />
                 <Button Content="Legacy Conversion..." Width="140" Margin="0,0,6,0" Click="LegacyConversion_Click" />
+                <Button Content="Clear Cache" Width="90" Margin="0,0,6,0" Click="ClearCache_Click"
+                        ToolTip="Re-reads the saved balloon data file from disk. If it's been deleted, this grid goes back to empty." />
             </StackPanel>
 
             <Button Grid.Column="1" Content="Close" Width="80" Click="Close_Click" />

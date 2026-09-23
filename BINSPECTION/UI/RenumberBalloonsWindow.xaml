@@ -1,0 +1,52 @@
+<Window x:Class="BINSPECTION.UI.RenumberBalloonsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Name="RootWindow"
+        Title="Re-Number Balloons"
+        Height="620" Width="640"
+        MinHeight="380" MinWidth="520"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/BINSPECTION;component/UI/Theme/DarkTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="10" Background="{StaticResource BgBase}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,0,0,8"
+                   TextWrapping="Wrap"
+                   Text="Type the balloon number each checked row should have - &quot;5&quot; or a grouped sub-number like &quot;5.2&quot;. Leave a row as-is to skip it. If a number is already in use, you'll be asked whether to swap the two balloons' numbers." />
+
+        <DataGrid x:Name="RowsGrid"
+                  Grid.Row="1"
+                  ItemsSource="{Binding Rows, ElementName=RootWindow}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserSortColumns="False"
+                  HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Current #" Binding="{Binding OriginalNumber}" IsReadOnly="True" Width="90" />
+                <DataGridTextColumn Header="Dimension" Binding="{Binding DimensionDisplay}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="New #" Binding="{Binding NewNumber, Mode=TwoWay}" Width="110" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="Apply" Width="110" Margin="0,0,8,0" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Apply_Click" />
+            <Button Content="Cancel" Width="110" IsCancel="True" Click="Cancel_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

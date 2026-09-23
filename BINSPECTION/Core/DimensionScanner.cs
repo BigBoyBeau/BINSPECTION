@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SolidWorks.Interop.sldworks;
+using SolidWorks.Interop.swconst;
 
 namespace BINSPECTION.Core
 {
@@ -39,10 +40,16 @@ namespace BINSPECTION.Core
         // each one paying that cost independently. A caller with no such
         // list handy (e.g. BalloonGridService, which only ever runs this
         // one scan) can leave it null and it's computed here instead.
+        // model (optional): needed only to read a dimension's displayed
+        // value for the zero-value-ordinate exclusion below
+        // (IDimension.GetUserValueIn requires it). A caller that leaves
+        // this null just skips that one exclusion - every other filter
+        // still applies.
         public List<DimensionHit> GetAllDimensions(
             DrawingDoc drawing,
             Action<DisplayDimension, bool> onEachDimension = null,
-            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null)
+            List<DrawingSheetHelper.ViewOnSheet> viewsBySheet = null,
+            ModelDoc2 model = null)
         {
             List<DimensionHit> hits =
                 new List<DimensionHit>();
@@ -72,7 +79,23 @@ namespace BINSPECTION.Core
                     bool isReference =
                         dim.ShowParenthesis;
 
-                    if (!isReference)
+                    // An ordinate dimension reading exactly 0 is the
+                    // datum/origin of its ordinate set (X0 or Y0), not a
+                    // real inspectable measurement - every other value in
+                    // that set is measured FROM it. Ballooning it produces
+                    // a meaningless "0.000" characteristic with no
+                    // tolerance that means anything. Non-ordinate
+                    // dimensions that happen to read 0 (a position
+                    // dimension coincident with its datum, etc.) are left
+                    // alone - this exclusion only applies to the ordinate
+                    // dimension types themselves.
+                    bool isZeroOrdinate =
+                        IsZeroValueOrdinate(dim, model);
+
+                    bool included =
+                        !isReference && !isZeroOrdinate;
+
+                    if (included)
                     {
                         hits.Add(new DimensionHit
                         {
@@ -82,7 +105,7 @@ namespace BINSPECTION.Core
                         });
                     }
 
-                    onEachDimension?.Invoke(dim, !isReference);
+                    onEachDimension?.Invoke(dim, included);
 
                     dim =
                         dim.GetNext5();
@@ -90,6 +113,52 @@ namespace BINSPECTION.Core
             }
 
             return hits;
+        }
+
+        // True if dim is an ordinate-type dimension (swOrdinateDimension
+        // and its Hor/Vert/Angular variants - same set BalloonPlacementService
+        // treats specially for placement) currently displaying 0 in the
+        // drawing's own units. A small epsilon rather than an exact == 0
+        // compare, since GetUserValueIn returns a rounded display-unit
+        // double that can carry ordinary floating-point noise even for a
+        // dimension that reads as a clean "0" on the sheet. A null model
+        // (caller didn't have one to pass) or any failure reading the type/
+        // value just means this exclusion doesn't apply - never treated as
+        // reference-dimension-style exclusion.
+        private static bool IsZeroValueOrdinate(DisplayDimension dim, ModelDoc2 model)
+        {
+            if (model == null)
+                return false;
+
+            try
+            {
+                swDimensionType_e type =
+                    (swDimensionType_e)dim.Type2;
+
+                bool isOrdinate =
+                    type == swDimensionType_e.swOrdinateDimension ||
+                    type == swDimensionType_e.swHorOrdinateDimension ||
+                    type == swDimensionType_e.swVertOrdinateDimension ||
+                    type == swDimensionType_e.swAngularOrdinateDimension;
+
+                if (!isOrdinate)
+                    return false;
+
+                Dimension swDim =
+                    dim.GetDimension2(0);
+
+                if (swDim == null)
+                    return false;
+
+                double value =
+                    swDim.GetUserValueIn(model);
+
+                return Math.Abs(value) < 1e-6;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

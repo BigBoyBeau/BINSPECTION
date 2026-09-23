@@ -3,11 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Name="RootWindow"
         Title="Legacy Conversion"
-        Height="640" Width="820"
-        MinHeight="360" MinWidth="600"
+        Height="740" Width="1080"
+        MinHeight="460" MinWidth="820"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize">
-    <Grid Margin="10">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/BINSPECTION;component/UI/Theme/DarkTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="10" Background="{StaticResource BgBase}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -18,10 +25,22 @@
         <TextBlock Grid.Row="0"
                    Margin="0,0,0,8"
                    TextWrapping="Wrap"
-                   Text="The Legacy # is what each balloon WILL become. &quot;Matches balloon&quot; shows which existing balloon that will apply to - leave Override blank to use it as shown. Type a different existing balloon number to redirect a row, type &quot;new&quot; to add a brand new characteristic for a legacy number with no existing balloon at all, or type &quot;skip&quot; to leave that legacy number unapplied entirely." />
+                   Text="The Legacy Balloon # is what each balloon WILL become (from the spreadsheet's own DIM #/balloon-number column - OP is a separate operation/sheet label, not a balloon number). &quot;Matches balloon&quot; shows the closest-scored existing balloon (Score/Why explain the match) - leave Override blank to use it as shown. Type a different existing balloon number to redirect a row, type &quot;new&quot; to add a brand new characteristic for a legacy balloon number with no existing balloon at all, or type &quot;skip&quot; to leave that legacy balloon number unapplied entirely. Review every row before clicking Apply - nothing is renumbered until then." />
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Content="Load Spreadsheet..." Width="150" Click="LoadSpreadsheet_Click" />
+            <Button Content="Load Spreadsheet..." Width="200" Click="LoadSpreadsheet_Click" />
+            <!-- TEMPORARY DISABLED 2026-09-21 (explicit user request - "the
+                 operation selection in the legacy conversion can be
+                 commented out, it is causing an issue where no balloons
+                 are being matched, for now leave it out"). See
+                 LegacyConversionWindow.xaml.cs's Operations/SelectedOperation
+                 remarks for the matching code-behind block and suspected
+                 root cause.
+            <TextBlock Text="Operation:" VerticalAlignment="Center" Margin="16,0,6,0" />
+            <ComboBox Width="150"
+                      ItemsSource="{Binding Operations, ElementName=RootWindow}"
+                      SelectedItem="{Binding SelectedOperation, ElementName=RootWindow}" />
+            -->
         </StackPanel>
 
         <DataGrid x:Name="RowsGrid"
@@ -32,13 +51,16 @@
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Legacy #" Binding="{Binding LegacyNumber}" IsReadOnly="True" Width="70" />
-                <DataGridTextColumn Header="Nominal (legacy)" Binding="{Binding Nominal}" IsReadOnly="True" Width="110" />
-                <DataGridTextColumn Header="Method" Binding="{Binding Method}" IsReadOnly="True" Width="90" />
-                <DataGridTextColumn Header="Class" Binding="{Binding Class}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn Header="Legacy Balloon #" Binding="{Binding LegacyBalloonNumber}" IsReadOnly="True" Width="120" />
+                <DataGridTextColumn Header="Sheet #" Binding="{Binding SheetNumber}" IsReadOnly="True" Width="75" />
+                <DataGridTextColumn Header="Nominal (legacy)" Binding="{Binding Nominal}" IsReadOnly="True" Width="130" />
+                <DataGridTextColumn Header="Nominal (matched)" Binding="{Binding MatchedNominal}" IsReadOnly="True" Width="130" />
+                <DataGridTextColumn Header="Method" Binding="{Binding Method}" IsReadOnly="True" Width="100" />
+                <DataGridTextColumn Header="Class" Binding="{Binding Class}" IsReadOnly="True" Width="85" />
                 <DataGridTextColumn Header="Matches balloon" Binding="{Binding MatchesBalloon}" IsReadOnly="True" Width="1.2*" />
-                <DataGridTextColumn Header="Why" Binding="{Binding Reason}" IsReadOnly="True" Width="1.2*" />
-                <DataGridTextColumn Header="Override (existing balloon #)" Binding="{Binding Assign}" Width="150" />
+                <DataGridTextColumn Header="Score" Binding="{Binding Score}" IsReadOnly="True" Width="70" />
+                <DataGridTextColumn Header="Why" Binding="{Binding Reason}" IsReadOnly="True" Width="1.4*" />
+                <DataGridTextColumn Header="Override (existing balloon #)" Binding="{Binding Assign}" Width="170" />
             </DataGrid.Columns>
         </DataGrid>
 
@@ -46,8 +68,8 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,10,0,0">
-            <Button Content="Apply" Width="80" Margin="0,0,8,0" Click="Apply_Click" />
-            <Button Content="Cancel" Width="80" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="Apply" Width="110" Margin="0,0,8,0" Style="{StaticResource PrimaryButton}" Click="Apply_Click" />
+            <Button Content="Cancel" Width="110" IsCancel="True" Click="Cancel_Click" />
         </StackPanel>
     </Grid>
 </Window>

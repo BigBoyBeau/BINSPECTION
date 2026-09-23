@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SolidWorks.Interop.sldworks;
@@ -89,27 +90,48 @@ namespace BINSPECTION.Core
             {
                 originalSheetName = (drawing.GetCurrentSheet() as Sheet)?.GetName();
             }
-            catch
+            catch (Exception ex)
             {
+                BinspectionLog.Error("DrawingSheetHelper.GetAllViewsBySheet: reading current sheet", ex);
             }
 
-            foreach (string sheetName in sheetNames ?? GetSheetNames(drawing))
+            try
             {
-                if (!ActivateSheet(drawing, sheetName))
-                    continue;
-
-                View view = drawing.GetFirstView() as View;
-
-                while (view != null)
+                foreach (string sheetName in sheetNames ?? GetSheetNames(drawing))
                 {
-                    views.Add(new ViewOnSheet { View = view, SheetName = sheetName });
+                    if (!ActivateSheet(drawing, sheetName))
+                    {
+                        BinspectionLog.Warn("DrawingSheetHelper.GetAllViewsBySheet",
+                            "could not activate sheet '" + sheetName + "' - its views were skipped");
+                        continue;
+                    }
 
-                    view = view.GetNextView() as View;
+                    // Per-sheet guard: one sheet whose view chain throws
+                    // partway through keeps whatever views were already
+                    // collected and moves on, instead of losing every sheet
+                    // after it (and leaving the wrong sheet active).
+                    try
+                    {
+                        View view = drawing.GetFirstView() as View;
+
+                        while (view != null)
+                        {
+                            views.Add(new ViewOnSheet { View = view, SheetName = sheetName });
+
+                            view = view.GetNextView() as View;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        BinspectionLog.Error("DrawingSheetHelper.GetAllViewsBySheet: walking views on sheet '" + sheetName + "'", ex);
+                    }
                 }
             }
-
-            if (!string.IsNullOrEmpty(originalSheetName))
-                ActivateSheet(drawing, originalSheetName);
+            finally
+            {
+                if (!string.IsNullOrEmpty(originalSheetName))
+                    ActivateSheet(drawing, originalSheetName);
+            }
 
             return views;
         }
@@ -132,10 +154,29 @@ namespace BINSPECTION.Core
 
             try
             {
+                // BalloonManager.CreateBalloon calls this on every single
+                // balloon it places (its own "which sheet" stand-in, since
+                // InsertNote has none), even when the caller already
+                // activated the right sheet once and is creating many
+                // balloons on it in a row (OnCreateBalloons' main loop) -
+                // without this check, a large Create Balloons run
+                // re-activates the SAME already-active sheet hundreds of
+                // times over, each one a real SolidWorks sheet switch that
+                // rebuilds/redraws the graphics area, which is exactly what
+                // made a large run look like it was stuck cycling through
+                // something long after the last prompt was dismissed.
+                string currentSheetName =
+                    (drawing.GetCurrentSheet() as Sheet)?.GetName();
+
+                if (!string.IsNullOrEmpty(currentSheetName) &&
+                    string.Equals(currentSheetName, sheetName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
                 return drawing.ActivateSheet(sheetName);
             }
-            catch
+            catch (Exception ex)
             {
+                BinspectionLog.Error("DrawingSheetHelper.ActivateSheet('" + sheetName + "')", ex);
                 return false;
             }
         }

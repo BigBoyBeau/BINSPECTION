@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BINSPECTION.Core;
 using SolidWorks.Interop.sldworks;
 
 namespace BINSPECTION.Models
@@ -38,6 +39,14 @@ namespace BINSPECTION.Models
         // whose display number doesn't appear anywhere in the saved data
         // file. Reported only - never touched automatically.
         public List<string> OrphanedBalloonNumbers { get; set; }
+
+        // Every View in the drawing, across every sheet, computed once by
+        // ReconciliationService.Reconcile and stashed here so
+        // RecreateMissingBalloons can hand it straight to
+        // BalloonManager.CreateBalloon's duplicate-number check instead of
+        // recomputing it (re-activating every sheet in the drawing) once
+        // per balloon it recreates.
+        public List<DrawingSheetHelper.ViewOnSheet> ViewsBySheet { get; set; }
 
         public ReconciliationResult()
         {

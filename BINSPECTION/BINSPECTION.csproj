@@ -14,6 +14,17 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
+    <!--
+      Referencing WindowsFormsIntegration (needed to host WPF content in a
+      SolidWorks Task Pane's WinForms ActiveX control - see UI\TaskPane\)
+      makes the WPF markup-compilation step try to copy NuGet-restore-
+      generated obj\*.nuget.g.props/targets files into the build, so it can
+      resolve package references during markup compilation. This project
+      has no PackageReferences (every dependency is a plain packages.config
+      HintPath reference) and never runs a restore that produces those
+      files, so that step fails with MSB3030 unless explicitly disabled.
+    -->
+    <IncludePackageReferencesDuringMarkupCompilation>false</IncludePackageReferencesDuringMarkupCompilation>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
@@ -60,6 +71,7 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />
     <Reference Include="System.Xaml" />
+    <Reference Include="WindowsFormsIntegration" />
     <Reference Include="System.Drawing" />
     <Reference Include="SolidWorks.Interop.sldworks">
       <HintPath>C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.sldworks.dll</HintPath>
@@ -111,6 +123,7 @@
     <Compile Include="Core\AttributeManager.cs" />
     <Compile Include="Core\CharacteristicManager.cs" />
     <Compile Include="Core\BalloonManager.cs" />
+    <Compile Include="Core\BinspectionLog.cs" />
     <Compile Include="Core\BalloonPlacementService.cs" />
     <Compile Include="Core\AnnotationTextMetrics.cs" />
     <Compile Include="Core\PersistenceManager.cs" />
@@ -143,10 +156,13 @@
     <Compile Include="Models\LegacyMatchResult.cs" />
     <Compile Include="Models\ReportHeaderSettings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Settings\Classes.cs" />
-    <Compile Include="Settings\Methods.cs" />
+    <Compile Include="Settings\AppSettings.cs" />
+    <Compile Include="Settings\SettingsManager.cs" />
     <Compile Include="UI\InspectionPMP.cs" />
     <Compile Include="UI\WindowSizing.cs" />
+    <Compile Include="UI\ToastNotification.xaml.cs">
+      <DependentUpon>ToastNotification.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\SheetToleranceSelectionWindow.xaml.cs">
       <DependentUpon>SheetToleranceSelectionWindow.xaml</DependentUpon>
     </Compile>
@@ -161,6 +177,18 @@
     </Compile>
     <Compile Include="UI\RefreshBalloonsSheetSelectionWindow.xaml.cs">
       <DependentUpon>RefreshBalloonsSheetSelectionWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\LegacyConversionSheetSelectionWindow.xaml.cs">
+      <DependentUpon>LegacyConversionSheetSelectionWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\RenumberBalloonsWindow.xaml.cs">
+      <DependentUpon>RenumberBalloonsWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\TaskPane\ITaskPaneHostControl.cs" />
+    <Compile Include="UI\TaskPane\TaskPaneHostControl.cs" />
+    <Compile Include="UI\TaskPane\BalloonRowViewModel.cs" />
+    <Compile Include="UI\TaskPane\BalloonManagerPanel.xaml.cs">
+      <DependentUpon>BalloonManagerPanel.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
   <ItemGroup>
@@ -181,6 +209,26 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\RefreshBalloonsSheetSelectionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\LegacyConversionSheetSelectionWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\RenumberBalloonsWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\Theme\DarkTheme.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\ToastNotification.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\TaskPane\BalloonManagerPanel.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

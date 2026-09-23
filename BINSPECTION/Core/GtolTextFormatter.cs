@@ -106,6 +106,45 @@ namespace BINSPECTION.Core
         private const char MmcGlyph = (char)0xE16D;
         private const char LmcGlyph = (char)0xE16C;
 
+        // Additional standalone "SolidWorks GDT" font codepoints found in a
+        // real legacy spreadsheet export (2026-09-21, D:\stress test2.xlsx)
+        // that DecodeBoxedText didn't recognize yet - confirmed by actually
+        // rendering these exact codepoints through the real font file
+        // (U:\Beaus Storage\backup\solidworks gdt.ttf, System.Drawing),
+        // same method used to build the maps above. Unlike SymbolGlyphs'
+        // GD&T tolerance-type symbols, these appeared as plain standalone
+        // characters in otherwise-ordinary cell text (no bordered "+0x200"
+        // variant observed, no boxed-ASCII framing around them), so they're
+        // decoded directly rather than through TryGetSymbolWord/Bordered.
+        //
+        // DepthGlyph (0xE15E) rendered as a downward triangle with a bar on
+        // top - the standard depth symbol, matching the SAME Unicode
+        // character (▽, U+25BD) this codebase's HoleCalloutExtractor
+        // already uses for depth callouts elsewhere (see
+        // [[binspection_hole_callout_symbols]]) - kept consistent with that
+        // existing convention rather than inventing a different mapping.
+        //
+        // CounterboreGlyph (0xE124) rendered as a squared-off "U" (open top,
+        // flat bottom) - the standard counterbore/spotface symbol, matching
+        // HoleCalloutExtractor's existing ⌴ (U+2334) mapping for the same
+        // reason.
+        //
+        // CountersinkGlyph (0xE125) rendered as a plain "V" - the standard
+        // countersink symbol, matching HoleCalloutExtractor's existing ⌵
+        // (U+2335) mapping.
+        //
+        // UnequalDisposalGlyph (0xE40D) rendered as a circled "U" with
+        // border bars, found sitting between a profile frame's two
+        // tolerance-value halves ("Profile of a Surface .003[glyph].001 A B
+        // C") - the ASME Y14.5 "unequally disposed profile tolerance"
+        // modifier. Decoded to the bare letter 'U' (no circle), matching
+        // this class's own existing precedent for Mmc/LmcGlyph below
+        // (which decode to plain "M"/"L", not the circled Unicode forms).
+        private const char DepthGlyph = (char)0xE15E;
+        private const char CounterboreGlyph = (char)0xE124;
+        private const char CountersinkGlyph = (char)0xE125;
+        private const char UnequalDisposalGlyph = (char)0xE40D;
+
         // One frame's content, ready to display two ways: DisplayText (plain
         // English, always populated) and BoxText (the real font's boxed
         // compartment string, null when the frame's symbol/range-symbol
@@ -611,6 +650,137 @@ namespace BINSPECTION.Core
             int dash = trimmed.IndexOf('-');
 
             return dash >= 0 ? trimmed.Substring(dash + 1) : trimmed;
+        }
+
+        // Reverses BuildBoxText's own encoding - turns text that already
+        // has "SolidWorks GDT" font characters baked directly into it (not
+        // rendered through the font, the actual character codes) back into
+        // plain text matching the same shape BuildDisplayText produces for
+        // BINSPECTION's own characteristics (e.g. "Flatness .005"). Added
+        // 2026-09-21 for Core/LegacyNumberImporter.cs - confirmed live that
+        // the user's real legacy spreadsheet applies this exact font to
+        // GD&T rows' cells, so EPPlus's plain .Text read comes back as raw
+        // PUA codepoints that mean nothing (and don't even parse as a
+        // number) without this translation.
+        //
+        // Un-shifts a boxed-ASCII character (+0xE000, see TryAppendShifted)
+        // back to plain ASCII, translates a bare OR bordered symbol glyph
+        // to its English word (a leading space is inserted before it if
+        // the output doesn't already end in one, so "Flatness" doesn't run
+        // into whatever came before it), and renders the boxed '|'
+        // compartment divider as a plain space rather than a literal pipe
+        // (readable prose, not a re-drawn box). Any character OUTSIDE
+        // these known PUA ranges - ordinary text - passes through
+        // unchanged, so this is safe to call on a cell that was never
+        // actually encoded this way at all (the common case for most
+        // columns).
+        public static string DecodeBoxedText(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+                return raw;
+
+            StringBuilder result = new StringBuilder(raw.Length);
+
+            foreach (char c in raw)
+            {
+                string symbolWord = TryGetSymbolWord(c);
+
+                if (symbolWord != null)
+                {
+                    if (result.Length > 0 && result[result.Length - 1] != ' ')
+                        result.Append(' ');
+
+                    result.Append(symbolWord);
+                    continue;
+                }
+
+                if (c == DiameterGlyph || c == Bordered(DiameterGlyph))
+                {
+                    result.Append('⌀');
+                    continue;
+                }
+
+                if (c == MmcGlyph || c == Bordered(MmcGlyph))
+                {
+                    result.Append('M');
+                    continue;
+                }
+
+                if (c == LmcGlyph || c == Bordered(LmcGlyph))
+                {
+                    result.Append('L');
+                    continue;
+                }
+
+                if (c == DepthGlyph)
+                {
+                    result.Append('▽');
+                    continue;
+                }
+
+                if (c == CounterboreGlyph)
+                {
+                    result.Append('⌴');
+                    continue;
+                }
+
+                if (c == CountersinkGlyph)
+                {
+                    result.Append('⌵');
+                    continue;
+                }
+
+                if (c == UnequalDisposalGlyph)
+                {
+                    result.Append('U');
+                    continue;
+                }
+
+                int shiftedCode = c - PuaShift;
+
+                if (shiftedCode >= 0x20 && shiftedCode <= 0x7E)
+                {
+                    char unshifted = (char)shiftedCode;
+                    result.Append(unshifted == '|' ? ' ' : unshifted);
+                    continue;
+                }
+
+                // The degree sign (0x00B0) shifted the SAME way as the
+                // 0x20-0x7E ASCII range above, confirmed by rendering a
+                // real legacy spreadsheet's "45°"/"90°"-style angle cells
+                // through the actual font (2026-09-21, user report: several
+                // angle values were showing as an undecoded box character
+                // instead of the degree sign) - it just falls outside the
+                // documented-at-the-time "printable ASCII only" range, so
+                // it needs its own check rather than widening that range to
+                // all of Latin-1 on a guess.
+                if (shiftedCode == 0x00B0)
+                {
+                    result.Append('°');
+                    continue;
+                }
+
+                result.Append(c);
+            }
+
+            return result.ToString().Trim();
+        }
+
+        // Bare or bordered - either variant of a known symbol glyph maps to
+        // the same English word, since which one a source text used isn't
+        // meaningful once decoded back to plain text.
+        private static string TryGetSymbolWord(char c)
+        {
+            foreach (KeyValuePair<string, char> entry in SymbolGlyphs)
+            {
+                if (c == entry.Value || c == Bordered(entry.Value))
+                {
+                    string word;
+                    return SymbolNames.TryGetValue(entry.Key, out word) ? word : entry.Key;
+                }
+            }
+
+            return null;
         }
 
         // phi/sPhi/sqr/deg -> the symbol actually printed on a drawing, per
