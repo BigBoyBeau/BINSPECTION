@@ -1,0 +1,37 @@
+# Visual Studio / VS Code local state
+.vs/
+.vscode/
+**/.vscode/
+*.suo
+*.user
+
+# Claude Code per-user local settings
+.claude/settings.local.json
+
+# Build output (per-project .gitignore files also cover these)
+bin/
+obj/
+
+# Third-party vendor documentation (Dassault Systemes copyright - keep local only)
+SolidWorks API Documentation/
+
+# Test drawings / models and their generated sidecars + reports
+# (may contain customer or company data - never commit)
+*.SLDDRW
+*.SLDPRT
+*.SLDASM
+*.binspection.json
+*.binspection.json.*
+*Inspection Report*.xlsx
+STRESSTEST*
+
+# Diagnostic dumps written during debugging
+*-debug.txt
+*MatchDebug.txt
+*.log
+
+# SolidWorks / Office lock and temp files
+~$*
+
+# NOTE: packages/ is intentionally tracked. The project uses packages.config
+# HintPath references and never runs a NuGet restore (see BINSPECTION.csproj).
