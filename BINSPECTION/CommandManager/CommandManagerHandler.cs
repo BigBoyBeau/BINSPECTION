@@ -22,9 +22,7 @@ namespace BINSPECTION.CommandManager
         // Set once from BInspectionAddIn.ConnectToSW, right after the Task
         // Pane is created - OnOpenBalloonManager pushes the active
         // drawing's context into the host control and brings the docked
-        // panel to front, rather than constructing a floating
-        // BalloonManagerWindow (still in the repo, just no longer wired up
-        // here - see UI/TaskPane/BalloonManagerPanel).
+        // panel to front (see UI/TaskPane/BalloonManagerPanel).
         private TaskpaneView _taskpaneView;
         private BINSPECTION.UI.TaskPane.TaskPaneHostControl _taskPaneHostControl;
 
@@ -155,7 +153,7 @@ namespace BINSPECTION.CommandManager
                 // Balloon/Ungroup Balloon/Toggle Unnumbered/Add Balloon/
                 // Delete Balloon/Match Legacy Numbers/Edit Attributes/Edit
                 // All Attributes commands - see OnOpenBalloonManager and
-                // UI/BalloonManagerWindow.
+                // UI/TaskPane/BalloonManagerPanel.
                 cmdGroup.AddCommandItem2(
                     "Balloon Manager",
                     -1,

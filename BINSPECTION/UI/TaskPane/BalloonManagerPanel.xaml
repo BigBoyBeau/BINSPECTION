@@ -82,7 +82,14 @@
             <StackPanel Orientation="Horizontal">
                 <Border Width="10" Height="10" CornerRadius="2" Background="{StaticResource AccentCyan}" VerticalAlignment="Top" Margin="0,5,10,0" />
                 <StackPanel>
-                    <TextBlock Text="BALLOON MANAGER" FontFamily="Consolas" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextHeading}" />
+
+                    <!-- version number best practices
+                    1st number is major- Initial release or major new features/redesign
+                    2nd is minor- New features, but not a redesign
+                    3rd is patch- Bug fixes, small improvements, and minor new features
+                    4th is build/revision- Interanl use, tells developer which build of the software is being used, and can be used to track down bugs-->
+
+                    <TextBlock Text="BINSPECTION V. 0.0.8.0" FontFamily="Consolas" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextHeading}" />
                     <TextBlock Text="{Binding SubtitleText, ElementName=RootPanel}" FontSize="12.5" Foreground="{StaticResource TextDim}" Margin="0,2,0,0" />
                 </StackPanel>
             </StackPanel>

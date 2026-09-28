@@ -24,7 +24,7 @@ namespace BINSPECTION.UI
     // Kept as plain code-behind acting as its own minimal view-model
     // (DataContext = this) rather than introducing a separate MVVM
     // framework - consistent with the rest of the add-in's UI, which is
-    // all plain code-behind too (see UI/BalloonManagerWindow).
+    // all plain code-behind too (see UI/TaskPane/BalloonManagerPanel).
     public partial class SheetToleranceSelectionWindow : Window, INotifyPropertyChanged
     {
         // One row of the sheets grid. UI-only - not itself serialized;

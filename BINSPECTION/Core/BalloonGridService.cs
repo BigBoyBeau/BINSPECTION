@@ -7,7 +7,7 @@ using SolidWorks.Interop.swconst;
 
 namespace BINSPECTION.Core
 {
-    // One row of BalloonManagerWindow's grid: either a live dimension found
+    // One row of BalloonManagerPanel's grid: either a live dimension found
     // by DimensionScanner (AnnotationSource set, so it can be ballooned via
     // Add), an already-persisted characteristic with no live dimension hit
     // this scan (a GD&T frame/note/surface finish balloon, or one whose
@@ -29,7 +29,7 @@ namespace BINSPECTION.Core
         // itself is still enumerated on the drawing). Selecting a dangling
         // annotation has been observed to crash SolidWorks outright (a
         // native access violation, not a catchable .NET exception), so
-        // BalloonManagerWindow.ResolveAnnotation skips straight to the
+        // BalloonManagerPanel.ResolveAnnotation skips straight to the
         // balloon-note fallback for a row flagged like this instead of ever
         // calling Select3 on it. Meaningless (left true) when
         // AnnotationSource is null.
@@ -66,7 +66,7 @@ namespace BINSPECTION.Core
         public bool IsBasic { get; set; }
     }
 
-    // The selection-independent operational core behind BalloonManagerWindow:
+    // The selection-independent operational core behind BalloonManagerPanel:
     // everything Group Balloon/Ungroup Balloon/Add Balloon/Un-Number/
     // Re-Number used to do by reading the user's SolidWorks graphics-area
     // selection, now driven by which grid rows are checked
@@ -111,7 +111,7 @@ namespace BINSPECTION.Core
             // instead of activating every sheet in the drawing only to
             // filter almost all of it right back out below - see
             // DrawingSheetHelper.GetAllViewsBySheet's remarks. The grid is
-            // always scoped to one sheet in practice (BalloonManagerWindow
+            // always scoped to one sheet in practice (BalloonManagerPanel
             // always passes its current _selectedSheet), so this is the
             // common case, not an edge case.
             List<DrawingSheetHelper.ViewOnSheet> viewsBySheet =

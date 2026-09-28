@@ -158,16 +158,12 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Settings\SettingsManager.cs" />
-    <Compile Include="UI\InspectionPMP.cs" />
     <Compile Include="UI\WindowSizing.cs" />
     <Compile Include="UI\ToastNotification.xaml.cs">
       <DependentUpon>ToastNotification.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\SheetToleranceSelectionWindow.xaml.cs">
       <DependentUpon>SheetToleranceSelectionWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\BalloonManagerWindow.xaml.cs">
-      <DependentUpon>BalloonManagerWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\LegacyConversionWindow.xaml.cs">
       <DependentUpon>LegacyConversionWindow.xaml</DependentUpon>
@@ -193,10 +189,6 @@
   </ItemGroup>
   <ItemGroup>
     <Page Include="UI\SheetToleranceSelectionWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="UI\BalloonManagerWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -48,7 +48,7 @@ namespace BINSPECTION.Models
 
         // The Classification/Inspection Method choices offered in Balloon
         // Manager's Method/Classification combo boxes (see
-        // UI/BalloonManagerWindow), seeded with BINSPECTION's defaults
+        // UI/TaskPane/BalloonManagerPanel), seeded with BINSPECTION's defaults
         // the first time a project is loaded and grown from there whenever
         // the user types a new value - per-project, same as ToleranceSets,
         // rather than a single global list every project shares.
