@@ -119,6 +119,7 @@
   <ItemGroup>
     <Compile Include="AddIn\BInspectionAddIn.cs" />
     <Compile Include="CommandManager\CommandManagerHandler.cs" />
+    <Compile Include="CommandManager\CommandManagerHandler.HoleCallout.cs" />
     <Compile Include="Core\AnnotationScanner.cs" />
     <Compile Include="Core\AttributeManager.cs" />
     <Compile Include="Core\CharacteristicManager.cs" />
@@ -135,6 +136,10 @@
     <Compile Include="Core\GtolTextFormatter.cs" />
     <Compile Include="Core\GdtSymbolFontTranslator.cs" />
     <Compile Include="Core\HoleCalloutExtractor.cs" />
+    <Compile Include="Core\HoleCalloutBuilder.cs" />
+    <Compile Include="Core\HoleCalloutService.cs" />
+    <Compile Include="Core\HoleCalloutStyle.cs" />
+    <Compile Include="Core\HoleSizeTable.cs" />
     <Compile Include="Core\ChamferDiagnostics.cs" />
     <Compile Include="Core\ReferenceDimensionDiagnostics.cs" />
     <Compile Include="Core\ChamferValueReader.cs" />
@@ -155,6 +160,7 @@
     <Compile Include="Models\ReconciliationResult.cs" />
     <Compile Include="Models\LegacyMatchResult.cs" />
     <Compile Include="Models\ReportHeaderSettings.cs" />
+    <Compile Include="Models\HoleCalloutDefinition.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Settings\SettingsManager.cs" />
@@ -179,6 +185,9 @@
     </Compile>
     <Compile Include="UI\RenumberBalloonsWindow.xaml.cs">
       <DependentUpon>RenumberBalloonsWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\HoleCalloutWindow.xaml.cs">
+      <DependentUpon>HoleCalloutWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\TaskPane\ITaskPaneHostControl.cs" />
     <Compile Include="UI\TaskPane\TaskPaneHostControl.cs" />
@@ -209,6 +218,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="UI\RenumberBalloonsWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="UI\HoleCalloutWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -66,6 +66,19 @@ namespace BINSPECTION
         {
             _commandManager.OnRestorePosition();
         }
+
+        public void OnAddHoleCallout()
+        {
+            _commandManager.OnAddHoleCallout();
+        }
+
+        // Callback for the note right-click menu item registered in
+        // ConnectToSW (AddMenuPopupItem3) - SolidWorks invokes it by name on
+        // this object, same as the ribbon passthroughs above.
+        public void OnEditHoleCallout()
+        {
+            _commandManager.OnEditHoleCallout();
+        }
         [ComRegisterFunction]
         public static void RegisterFunction(Type t)
         {
@@ -146,6 +159,27 @@ namespace BINSPECTION
 
                 _commandManager.CreateCommandManager();
 
+                // "Edit Hole Callout (BINSPECTION)" on a note's right-click
+                // menu in drawings. Shown for every note (SolidWorks can't
+                // filter by which note), so OnEditHoleCallout itself says
+                // when the note isn't one of ours.
+                try
+                {
+                    _swApp.AddMenuPopupItem3(
+                        (int)swDocumentTypes_e.swDocDRAWING,
+                        _addinID,
+                        (int)swSelectType_e.swSelNOTES,
+                        CommandManagerHandler.EditHoleCalloutPopupLabel,
+                        nameof(OnEditHoleCallout),
+                        "",
+                        "Edit this BINSPECTION hole callout and regenerate its inspection rows",
+                        "");
+                }
+                catch (Exception ex)
+                {
+                    Core.BinspectionLog.Error("ConnectToSW (hole callout popup menu)", ex);
+                }
+
                 // The docked Task Pane hosting Balloon Manager. Failure
                 // here (e.g. the ActiveX control couldn't be COM-activated)
                 // is caught on its own rather than let it fail the whole
@@ -201,6 +235,22 @@ namespace BINSPECTION
                 if (_commandManager != null)
                 {
                     _commandManager.RemoveCommandManager();
+                }
+
+                try
+                {
+                    _swApp?.RemoveMenuPopupItem2(
+                        (int)swDocumentTypes_e.swDocDRAWING,
+                        _addinID,
+                        (int)swSelectType_e.swSelNOTES,
+                        CommandManagerHandler.EditHoleCalloutPopupLabel,
+                        nameof(OnEditHoleCallout),
+                        "",
+                        "Edit this BINSPECTION hole callout and regenerate its inspection rows",
+                        "");
+                }
+                catch
+                {
                 }
 
                 try

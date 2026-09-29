@@ -60,7 +60,8 @@
                         <Border Background="{StaticResource BgBase}"
                                 Padding="4,0"
                                 Margin="10,0,0,0"
-                                HorizontalAlignment="Left">
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top">
                             <ContentPresenter ContentSource="Header"
                                               TextElement.Foreground="{StaticResource TextDim}"
                                               TextElement.FontSize="12.5" />

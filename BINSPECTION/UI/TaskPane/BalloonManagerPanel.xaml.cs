@@ -127,6 +127,12 @@ namespace BINSPECTION.UI.TaskPane
         public event EventHandler RestorePositionRequested;
         public event EventHandler GenerateReportRequested;
 
+        // Add Hole Callout reads the live SolidWorks selection (the hole
+        // edge/point), so it runs in CommandManagerHandler like the ribbon
+        // button. Editing a callout happens on the drawing (select it, then
+        // Edit Hole Callout or the note right-click item), not here.
+        public event EventHandler AddHoleCalloutRequested;
+
         // "Reset" re-runs the exact same active-document lookup and fresh
         // disk load OnOpenBalloonManager already does every time this panel
         // is shown - the panel is a long-lived singleton (see LoadContext's
@@ -487,6 +493,11 @@ namespace BINSPECTION.UI.TaskPane
         private void GenerateReport_Click(object sender, RoutedEventArgs e)
         {
             GenerateReportRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void AddHoleCallout_Click(object sender, RoutedEventArgs e)
+        {
+            AddHoleCalloutRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void Reset_Click(object sender, RoutedEventArgs e)

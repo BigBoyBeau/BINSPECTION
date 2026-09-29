@@ -147,8 +147,10 @@ namespace BINSPECTION.Core
                 // Core/BalloonGridService.MarkUnnumbered) - they never
                 // show up on the sheet, so they never show up here
                 // either.
+                // A callout that hasn't been ballooned yet has no number to
+                // report under either.
                 List<Characteristic> numbered = characteristics.FindAll(
-                    c => !c.IsUnnumbered);
+                    c => !c.IsUnnumbered && !HoleCalloutService.IsAwaitingBalloon(c));
 
                 List<Characteristic> cmmRows = numbered.FindAll(
                     c => string.Equals(c.Method, CmmMethodName, StringComparison.OrdinalIgnoreCase));
@@ -527,6 +529,13 @@ namespace BINSPECTION.Core
                 return;
             }
 
+            if (characteristic.CalloutValue != null && !characteristic.CalloutValue.Nominal.HasValue)
+            {
+                upperLimitValue = null;
+                lowerLimitValue = null;
+                return;
+            }
+
             upperLimitValue = nominal + plusTolerance;
             lowerLimitValue = nominal + minusTolerance;
         }
@@ -785,6 +794,20 @@ namespace BINSPECTION.Core
             minusTolerance = 0;
             resolved = false;
 
+            // An Add Hole Callout row has no live dimension to read - its
+            // values were stored when the callout was created (see
+            // Characteristic.CalloutValue). A text-only value (the thread
+            // designation) stays unresolved, so it gets no sheet tolerance
+            // fallback and blank limits (ResolveLimitCellValues).
+            if (characteristic.CalloutValue != null)
+            {
+                nominal = characteristic.CalloutValue.Nominal ?? 0;
+                plusTolerance = characteristic.CalloutValue.PlusTolerance;
+                minusTolerance = characteristic.CalloutValue.MinusTolerance;
+                resolved = characteristic.CalloutValue.Nominal.HasValue;
+                return;
+            }
+
             IDisplayDimension displayDimension =
                 PersistentReferenceHelper.ResolveDimension(
                     model,
@@ -944,6 +967,15 @@ namespace BINSPECTION.Core
         {
             decimalPlaces = 0;
             isAngular = false;
+
+            // Stored with the value itself - there's no live dimension
+            // to ask.
+            if (characteristic.CalloutValue != null)
+            {
+                decimalPlaces = characteristic.CalloutValue.DecimalPlaces;
+                isAngular = characteristic.CalloutValue.IsAngular;
+                return true;
+            }
 
             try
             {

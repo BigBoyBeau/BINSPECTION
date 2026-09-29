@@ -35,6 +35,8 @@ namespace BINSPECTION.Core
             "refresh-balloons",            // Refresh Balloons
             "save-balloon-position",       // Save Position
             "restore-balloon-position",    // Restore Position
+            "add-hole-callout",            // Add Hole Callout
+            "edit-hole-callout",           // Edit Hole Callout
         };
 
         // Matches the exact per-icon PNG sizes shipped under Icons\, which

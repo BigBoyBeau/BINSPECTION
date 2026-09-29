@@ -70,6 +70,15 @@ namespace BINSPECTION.Core
                     continue;
                 }
 
+                // An Add Hole Callout row that hasn't been ballooned yet
+                // (Number 0) - there's no balloon to be missing, so it's
+                // just kept tracked, like an un-numbered row.
+                if (HoleCalloutService.IsAwaitingBalloon(characteristic))
+                {
+                    result.Matched.Add(characteristic);
+                    continue;
+                }
+
                 accountedForNumbers.Add(characteristic.DisplayNumber);
 
                 // Case 1: nothing was ever saved for this row (data file

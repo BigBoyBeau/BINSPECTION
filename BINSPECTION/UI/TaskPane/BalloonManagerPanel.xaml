@@ -126,6 +126,7 @@
                 <Button Content="De-#" Style="{StaticResource ToolButton}" Click="DeNumber_Click" ToolTip="Remove the checked balloon(s) and free up their number(s) to be assigned elsewhere - Method/Classification are kept" />
                 <Button Content="Re-#" Style="{StaticResource ToolButton}" Click="ReNumber_Click" ToolTip="Type a specific balloon number for each checked row" />
                 <Button Content="Legacy..." Style="{StaticResource ToolButton}" Click="LegacyConversion_Click" ToolTip="Legacy Conversion" />
+                <Button Content="Hole Callout..." Style="{StaticResource ToolButton}" Click="AddHoleCallout_Click" ToolTip="Add a hole callout pointing at the object(s) selected on the drawing (not ballooned - use Add or Create Balloons for that)" />
             </WrapPanel>
         </StackPanel>
 

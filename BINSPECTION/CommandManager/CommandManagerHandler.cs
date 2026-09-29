@@ -10,7 +10,9 @@ using SolidWorks.Interop.swconst;
 
 namespace BINSPECTION.CommandManager
 {
-    public class CommandManagerHandler
+    // Split across files: the Add/Edit Hole Callout commands live in
+    // CommandManagerHandler.HoleCallout.cs.
+    public partial class CommandManagerHandler
 
     {
 
@@ -58,6 +60,10 @@ namespace BINSPECTION.CommandManager
                 hostControl.SavePositionRequested += (s, e) => OnSavePosition();
                 hostControl.RestorePositionRequested += (s, e) => OnRestorePosition();
                 hostControl.GenerateReportRequested += (s, e) => OnGenerateReport();
+
+                // Reloads the panel itself on success (see
+                // CommandManagerHandler.HoleCallout.cs).
+                hostControl.AddHoleCalloutRequested += (s, e) => OnAddHoleCallout();
 
                 // Reset just re-runs the same active-document/fresh-disk-load
                 // flow OnOpenBalloonManager already does on every open - see
@@ -268,6 +274,40 @@ namespace BINSPECTION.CommandManager
                     (int)swCommandItemType_e.swMenuItem |
                     (int)swCommandItemType_e.swToolbarItem);
 
+                // Authors a hole callout note pointing at whatever is
+                // selected (any object, or an empty spot in a view) and adds
+                // its characteristic rows - for holes with no usable native
+                // callout (e.g. a STEP import with no Hole Wizard data). No
+                // balloon until Create Balloons/Balloon Manager's Add. Editing
+                // happens from the note's right-click menu or Balloon
+                // Manager. See CommandManagerHandler.HoleCallout.cs.
+                cmdGroup.AddCommandItem2(
+                    "Add Hole Callout",
+                    -1,
+                    "Add a hole callout pointing at the selected object(s) and add its inspection rows",
+                    "Hole Callout",
+                    10,
+                    nameof(OnAddHoleCallout),
+                    "",
+                    10,
+                    (int)swCommandItemType_e.swMenuItem |
+                    (int)swCommandItemType_e.swToolbarItem);
+
+                // Reopens the SELECTED hole callout (its note or its balloon)
+                // in the same dialog - the note text and its rows regenerate
+                // together. Same handler as the note right-click item.
+                cmdGroup.AddCommandItem2(
+                    "Edit Hole Callout",
+                    -1,
+                    "Edit the selected hole callout (select its note or balloon first)",
+                    "Edit Callout",
+                    11,
+                    nameof(OnEditHoleCallout),
+                    "",
+                    11,
+                    (int)swCommandItemType_e.swMenuItem |
+                    (int)swCommandItemType_e.swToolbarItem);
+
                 cmdGroup.HasToolbar = true;
                 cmdGroup.HasMenu = true;
 
@@ -283,6 +323,8 @@ namespace BINSPECTION.CommandManager
                 int cmd8 = cmdGroup.get_CommandID(7);
                 int cmd9 = cmdGroup.get_CommandID(8);
                 int cmd10 = cmdGroup.get_CommandID(9);
+                int cmd11 = cmdGroup.get_CommandID(10);
+                int cmd12 = cmdGroup.get_CommandID(11);
 
                 // Previously showed an OK popup ("BINSPECTION Commands
                 // Loaded: ...") every time the command group registered -
@@ -293,7 +335,7 @@ namespace BINSPECTION.CommandManager
                 // debug output so a developer can confirm registration
                 // succeeded without SolidWorks interrupting normal use.
                 System.Diagnostics.Debug.WriteLine(
-                    $"BINSPECTION Commands Loaded: {cmd1}, {cmd2}, {cmd3}, {cmd4}, {cmd5}, {cmd6}, {cmd7}, {cmd8}, {cmd9}, {cmd10}");
+                    $"BINSPECTION Commands Loaded: {cmd1}, {cmd2}, {cmd3}, {cmd4}, {cmd5}, {cmd6}, {cmd7}, {cmd8}, {cmd9}, {cmd10}, {cmd11}, {cmd12}");
 
                 // Groups the same 10 commands above into a proper ribbon tab
                 // (Setup / Balloons / Position / Report), separate from the
@@ -307,7 +349,7 @@ namespace BINSPECTION.CommandManager
                 // give visual separation between clusters but not a text
                 // caption under each one the way "3D Sketch"/"Curves" show
                 // under native SolidWorks ribbon groups.
-                CreateCommandTab(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7, cmd8, cmd9, cmd10);
+                CreateCommandTab(cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7, cmd8, cmd9, cmd10, cmd11, cmd12);
             }
             catch (Exception ex)
             {
@@ -338,7 +380,9 @@ namespace BINSPECTION.CommandManager
             int cmdRemoveBalloons,
             int cmdRefreshBalloons,
             int cmdSavePosition,
-            int cmdRestorePosition)
+            int cmdRestorePosition,
+            int cmdAddHoleCallout,
+            int cmdEditHoleCallout)
         {
             const string tabName = "BINSPECTION";
 
@@ -376,7 +420,7 @@ namespace BINSPECTION.CommandManager
 
             AddCommandTabGroup(
                 commandTab,
-                new[] { cmdCreateBalloons, cmdBalloonManager, cmdRestoreBalloons, cmdRefreshBalloons, cmdRemoveBalloons },
+                new[] { cmdCreateBalloons, cmdAddHoleCallout, cmdEditHoleCallout, cmdBalloonManager, cmdRestoreBalloons, cmdRefreshBalloons, cmdRemoveBalloons },
                 swCommandTabButtonTextDisplay_e.swCommandTabButton_TextBelow);
 
             AddCommandTabGroup(
@@ -1316,7 +1360,40 @@ namespace BINSPECTION.CommandManager
                             continue;
 
                         if (CharacteristicManager.HasCharacteristic(persistentRefId))
+                        {
+                            // An Add Hole Callout note whose rows were saved
+                            // without a balloon - balloon it now, keeping its
+                            // structured rows (not re-split as note text).
+                            Characteristic pendingCallout =
+                                CharacteristicManager.GetCharacteristic(persistentRefId);
+
+                            if (pendingCallout?.HoleCallout != null &&
+                                HoleCalloutService.IsAwaitingBalloon(pendingCallout) &&
+                                BelongsOnSheet(pendingCallout.SheetName ?? noteHit.SheetName, currentSheet))
+                            {
+                                int calloutNumber =
+                                    CharacteristicManager.GetNextNumberForSheet(
+                                        currentSheet, sheetPicker.NumberRanges, allKnownNumbers);
+
+                                string calloutError;
+
+                                int ballooned = HoleCalloutService.BalloonPendingCallout(
+                                    model, CharacteristicManager.ExportAll(), pendingCallout, calloutNumber, balloonManager,
+                                    duplicateCheckViewsBySheet, existingBalloonIndex, out calloutError);
+
+                                if (ballooned > 0)
+                                {
+                                    allKnownNumbers.Add(ballooned);
+                                    balloonsCreated++;
+                                }
+                                else
+                                {
+                                    RecordFailure("hole callout: " + calloutError);
+                                }
+                            }
+
                             continue;
+                        }
 
                         List<string> lines =
                             AnnotationScanner.SplitLines(((Note)sourceNote).GetText());

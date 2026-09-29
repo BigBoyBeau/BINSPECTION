@@ -314,6 +314,41 @@ namespace BINSPECTION.Core
 
                 foreach (BalloonGridRow row in checkedRows)
                 {
+                    // An Add Hole Callout created without a balloon: any of
+                    // its rows balloons the whole callout, on its note.
+                    Characteristic calloutAnchor = row.HasBalloon
+                        ? null
+                        : HoleCalloutService.FindAnchor(projectData, row.Characteristic);
+
+                    if (calloutAnchor != null && HoleCalloutService.IsAwaitingBalloon(calloutAnchor))
+                    {
+                        TryRow(result, Describe(row), () =>
+                        {
+                            INote calloutNote = HoleCalloutService.ResolveNote(model, calloutAnchor.PersistentRefId);
+
+                            if (calloutNote == null)
+                            {
+                                result.Errors.Add(Describe(row) + ": the callout note is no longer on the drawing.");
+                                return;
+                            }
+
+                            int calloutNumber = NextNumber(calloutAnchor.SheetName ?? row.SheetName, projectData);
+
+                            Note calloutBalloon = batch.CreateBalloon(
+                                calloutNote, calloutAnchor.SheetName, calloutNumber.ToString(), Describe(row), result);
+
+                            if (calloutBalloon == null)
+                                return;
+
+                            result.Changed = true;
+
+                            HoleCalloutService.AssignCalloutNumber(
+                                projectData.Characteristics, calloutAnchor, calloutNumber, batch.GetPersistId(calloutBalloon));
+                        });
+
+                        continue;
+                    }
+
                     if (row.HasBalloon || row.AnnotationSource == null)
                         continue;
 

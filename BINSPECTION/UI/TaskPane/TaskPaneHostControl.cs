@@ -115,6 +115,12 @@ namespace BINSPECTION.UI.TaskPane
             remove { _panel.GenerateReportRequested -= value; }
         }
 
+        public event EventHandler AddHoleCalloutRequested
+        {
+            add { _panel.AddHoleCalloutRequested += value; }
+            remove { _panel.AddHoleCalloutRequested -= value; }
+        }
+
         public event EventHandler ResetRequested
         {
             add { _panel.ResetRequested += value; }

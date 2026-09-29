@@ -168,6 +168,19 @@ namespace BINSPECTION.Models
 
         public double? BalloonPositionZ { get; set; }
 
+        // Set on the ANCHOR row of a hole callout authored by Add Hole
+        // Callout (Core/HoleCalloutService.cs) - the full dialog state, so
+        // Edit Hole Callout can regenerate the note and every row from it.
+        // Null for every other characteristic, including the callout's own
+        // "#n" sibling rows.
+        public HoleCalloutDefinition HoleCallout { get; set; }
+
+        // This row's own stored nominal/tolerance - see CharacteristicValue.
+        // Set on every row of an Add Hole Callout callout (anchor and
+        // siblings); null everywhere else, where the report reads the live
+        // dimension instead.
+        public CharacteristicValue CalloutValue { get; set; }
+
         // What actually gets stamped on the balloon and matched against
         // sheet text - "12" for a standalone characteristic OR a group's
         // bare first/anchor member, "12.2" for a group's later member.

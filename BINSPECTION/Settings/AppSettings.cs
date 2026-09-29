@@ -8,5 +8,11 @@ namespace BINSPECTION.Settings
     public class AppSettings
     {
         public bool SnapToSelectionEnabled { get; set; } = true;
+
+        // Last folder a hole callout style was loaded from or saved to (see
+        // Core/HoleCalloutStyle.cs) - the Hole Callout dialog opens its file
+        // browsers here and lists the styles found here, so a shared
+        // styles folder only has to be found once.
+        public string HoleCalloutStyleFolder { get; set; }
     }
 }
